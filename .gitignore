@@ -1,12 +1,27 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases & lock files
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+ideas.db
+
 # Virtual environments
 venv/
 env/
-.env
-src/.venv/
 .venv/
 .venv
+src/.venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Python cache
+# Python bytecode & cache
 __pycache__/
 *.py[cod]
 *$py.class
@@ -15,7 +30,7 @@ __pycache__/
 *.pyd
 *.so
 
-# Setup
+# Distribution & build artifacts
 build/
 develop-eggs/
 dist/
@@ -29,16 +44,45 @@ sdist/
 var/
 wheels/
 share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# C extensions
-*.so
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
 
-# IDE / Editor
+# Application runtime outputs & logs
+output/
+logs/
+*.log
+tmp/
+
+# IDE / Editor configuration
 .vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
 
-# Claude Code
+# Claude / AI tools state
 .claude/
 
-# OS specific
+# Operating System specific files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
