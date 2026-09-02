@@ -141,7 +141,8 @@ import json
 from pathlib import Path
 
 def load_builtin_presets() -> dict:
-    registry_path = Path("H:/Automation/Presets/master_presets_registry.json")
+    from app.core.config import get_presets_registry_path
+    registry_path = get_presets_registry_path()
     presets = {}
     if registry_path.exists():
         try:
