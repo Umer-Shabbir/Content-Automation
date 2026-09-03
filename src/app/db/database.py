@@ -5,9 +5,11 @@ import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
+from app.core.config import get_default_db_path
+
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 # Default persistent database location in Content Automation root
-DEFAULT_DB_PATH = str(Path(__file__).resolve().parents[3] / "ideas.db")
+DEFAULT_DB_PATH = str(get_default_db_path())
 
 
 class DatabaseCoordinator:

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Signal, QTimer
 
+from app.core.config import get_default_output_dir
 from app.models.preset import BUILTIN_PRESETS
 
 
@@ -112,7 +113,7 @@ class GenerateView(QWidget):
         # Output Directory
         out_dir_layout = QHBoxLayout()
         self.output_dir_input = QLineEdit()
-        self.output_dir_input.setText(r"H:\Automation\output")
+        self.output_dir_input.setText(str(get_default_output_dir()))
         self.btn_browse = QPushButton("Browse...")
         self.btn_browse.clicked.connect(self._on_browse_output_dir)
         out_dir_layout.addWidget(self.output_dir_input)
@@ -164,7 +165,7 @@ class GenerateView(QWidget):
         dir_path = QFileDialog.getExistingDirectory(
             self,
             "Select Output Directory",
-            self.output_dir_input.text() or r"H:\Automation\output"
+            self.output_dir_input.text() or str(get_default_output_dir())
         )
         if dir_path:
             self.output_dir_input.setText(dir_path)
@@ -194,7 +195,7 @@ class GenerateView(QWidget):
 
     def _on_select_project_folders(self):
         """Open dialog allowing user to select one or multiple project folders for 2nd round prompt generation."""
-        output_base = self.output_dir_input.text().strip() or r"H:\Automation\output"
+        output_base = self.output_dir_input.text().strip() or str(get_default_output_dir())
 
         # Open directory browser dialog
         dialog = QFileDialog(self)
@@ -220,7 +221,7 @@ class GenerateView(QWidget):
 
     def _on_scan_master_directory(self):
         """Scan a master directory to find projects in 'VOICED' stage to process."""
-        output_base = self.output_dir_input.text().strip() or r"H:\Automation\output"
+        output_base = self.output_dir_input.text().strip() or str(get_default_output_dir())
 
         master_dir = QFileDialog.getExistingDirectory(
             self,

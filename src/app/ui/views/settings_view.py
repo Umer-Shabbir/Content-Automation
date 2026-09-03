@@ -15,6 +15,8 @@ import os
 import json
 from pathlib import Path
 
+from app.core.config import get_default_output_dir
+
 SETTINGS_FILE = Path.home() / ".content_automation" / "settings.json"
 
 
@@ -68,7 +70,7 @@ class SettingsView(QWidget):
         # Output Directory
         out_dir_layout = QHBoxLayout()
         self.out_dir_edit = QLineEdit()
-        self.out_dir_edit.setText(r"H:\Automation\output")
+        self.out_dir_edit.setText(str(get_default_output_dir()))
 
         self.btn_browse = QPushButton("Browse...")
         self.btn_browse.clicked.connect(self._browse_directory)
@@ -98,13 +100,14 @@ class SettingsView(QWidget):
 
     def _browse_directory(self):
         """Open a folder dialog to select the output directory"""
-        start_dir = self.out_dir_edit.text() if os.path.exists(self.out_dir_edit.text()) else r"H:\Automation\output"
+        default_dir = str(get_default_output_dir())
+        start_dir = self.out_dir_edit.text() if os.path.exists(self.out_dir_edit.text()) else default_dir
         directory = QFileDialog.getExistingDirectory(self, "Select Output Directory", start_dir)
         if directory:
             self.out_dir_edit.setText(directory)
 
     def load_settings(self):
-        """Load settings from JSON file on disk."""
+        """Load settings from JSON file on disk, falling back to environment variables."""
         if SETTINGS_FILE.exists():
             try:
                 data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
@@ -127,6 +130,23 @@ class SettingsView(QWidget):
             except Exception as e:
                 print(f"Error loading settings: {e}")
 
+        # Fall back to environment variables if fields are unconfigured or default
+        env_base_url = os.getenv("ANTHROPIC_BASE_URL") or os.getenv("API_BASE_URL")
+        if env_base_url and (not self.api_url_edit.text() or self.api_url_edit.text() == "https://api.anthropic.com"):
+            self.api_url_edit.setText(env_base_url)
+
+        env_api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("API_KEY")
+        if env_api_key and not self.api_key_edit.text():
+            self.api_key_edit.setText(env_api_key)
+
+        env_model = os.getenv("ANTHROPIC_MODEL") or os.getenv("API_MODEL")
+        if env_model and (not self.model_name_edit.text() or self.model_name_edit.text() == "claude-sonnet-4-6"):
+            self.model_name_edit.setText(env_model)
+
+        env_out_dir = os.getenv("CONTENT_AUTOMATION_OUTPUT_DIR") or os.getenv("OUTPUT_DIR")
+        if env_out_dir and not self.out_dir_edit.text():
+            self.out_dir_edit.setText(env_out_dir)
+
     def save_settings(self):
         """Save settings to JSON file on disk."""
         try:
@@ -135,7 +155,7 @@ class SettingsView(QWidget):
                 "base_url": self.api_url_edit.text().strip(),
                 "api_key": self.api_key_edit.text().strip(),
                 "model": self.model_name_edit.text().strip(),
-                "output_dir": self.out_dir_edit.text().strip() or r"H:\Automation\output",
+                "output_dir": self.out_dir_edit.text().strip() or str(get_default_output_dir()),
                 "max_concurrent_requests": self.max_concurrent_spin.value()
             }
             SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")

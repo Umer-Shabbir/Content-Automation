@@ -82,11 +82,8 @@ class IdeaManager:
 
     def _sync_default_disk_directories(self, extra_dirs: Optional[List[str]] = None):
         """Automatically scans known content output folders and registers all historical projects."""
-        scan_roots = [
-            r"H:\Automation\Generated Content",
-            r"H:\Automation\Old GenCon",
-            r"H:\Automation\output",
-        ]
+        from app.core.config import get_default_scan_roots
+        scan_roots = get_default_scan_roots()
         if extra_dirs:
             for ed in extra_dirs:
                 if ed and ed not in scan_roots:
