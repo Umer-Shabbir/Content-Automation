@@ -1,5 +1,8 @@
 import os
 
+# Ensure headless offscreen platform for Qt across all environments (CI, Linux headless, etc.)
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 def pytest_sessionfinish(session, exitstatus):
     """
     On Windows with PySide6/Qt, C-runtime shutdown of static Qt objects

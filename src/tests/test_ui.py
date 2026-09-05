@@ -1,6 +1,7 @@
 import pytest
 import os
 import sys
+from pathlib import Path
 
 # Ensure offscreen platform for headless Qt tests
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -90,14 +91,17 @@ def test_generate_view(qapp):
 
     view.start_generation_requested.connect(on_generate)
 
+    from app.core.config import get_default_output_dir
     # Check default output directory
-    assert view.output_dir_input.text() == r"H:\Automation\output"
+    assert view.output_dir_input.text() == str(get_default_output_dir())
+
+    test_custom_dir = str(Path.home() / "custom_test_output")
 
     view.topic_input.setText("Space Odyssey")
     if "money_chuck" in view.preset_checkboxes:
         view.preset_checkboxes["money_chuck"].setChecked(True)
     view.count_spin.setValue(2)
-    view.output_dir_input.setText(r"H:\Custom\Path")
+    view.output_dir_input.setText(test_custom_dir)
 
     view.start_btn.click()
     assert len(emitted) == 1
@@ -105,7 +109,7 @@ def test_generate_view(qapp):
     assert topic == "Space Odyssey"
     assert "money_chuck" in presets
     assert count == 2
-    assert custom_output_dir == r"H:\Custom\Path"
+    assert custom_output_dir == test_custom_dir
 
 
 def test_history_view(qapp):
