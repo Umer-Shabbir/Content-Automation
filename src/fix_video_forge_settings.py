@@ -1,7 +1,10 @@
+import os
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 from pathlib import Path
 import re
 
-p = Path("H:/Automation/Video Forge/app/storage/settings_manager.py")
+p = Path(_AUTOMATION_ROOT / 'Video Forge' / 'app' / 'storage' / 'settings_manager.py')
 content = p.read_text(encoding="utf-8")
 
 replacement = """def _default_presets() -> dict:
@@ -36,7 +39,7 @@ replacement = """def _default_presets() -> dict:
         # Try load master registry
         try:
             import json
-            registry_path = Path("H:/Automation/Presets/master_presets_registry.json")
+            registry_path = Path(_PRESETS_PATH)
             if registry_path.exists():
                 data = json.loads(registry_path.read_text(encoding="utf-8"))
                 for slug, item in data.items():

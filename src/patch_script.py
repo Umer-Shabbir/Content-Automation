@@ -1,6 +1,10 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import re
 
-with open(r"H:\Automation\Image Automation\backend\app\routers\queue.py", "r", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'backend' / 'app' / 'routers' / 'queue.py', "r", encoding="utf-8") as f:
     content = f.read()
 
 # We need to parse thumbnail_prompt.txt if it exists
@@ -86,6 +90,6 @@ new_validation = """        # Validation logic to skip if images directory is fu
 # Need to replace the exact validation logic
 content = re.sub(r'        # Validation logic to skip if images directory is fully populated[\s\S]*?return False,.*?images\)"', new_validation.strip('\n'), content)
 
-with open(r"H:\Automation\Image Automation\backend\app\routers\queue.py", "w", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'backend' / 'app' / 'routers' / 'queue.py', "w", encoding="utf-8") as f:
     f.write(content)
 

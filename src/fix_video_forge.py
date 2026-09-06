@@ -1,11 +1,14 @@
+import os
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import json
 from pathlib import Path
 import re
 
-REGISTRY_PATH = Path('H:/Automation/Presets/master_presets_registry.json')
+REGISTRY_PATH = Path(_PRESETS_PATH)
 registry = json.loads(REGISTRY_PATH.read_text(encoding='utf-8'))
 
-p = Path("H:/Automation/Video Forge/app/storage/settings_manager.py")
+p = Path(_AUTOMATION_ROOT / 'Video Forge' / 'app' / 'storage' / 'settings_manager.py')
 content = p.read_text(encoding="utf-8")
 
 replacement = """    @staticmethod
@@ -19,7 +22,7 @@ replacement = """    @staticmethod
             from pathlib import Path
             from app.core.project import RenderProfile, SubtitleMode, TransitionType, MotionType
             
-            registry_path = Path("H:/Automation/Presets/master_presets_registry.json")
+            registry_path = Path(_PRESETS_PATH)
             if registry_path.exists():
                 registry = json.loads(registry_path.read_text(encoding="utf-8"))
                 for preset_name, data in registry.items():

@@ -1,6 +1,10 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 ﻿import re
 
-with open(r'H:\Automation\Video Forge\app\utils\file_utils.py', 'r', encoding='utf-8') as f:
+with open(_AUTOMATION_ROOT / 'Video Forge' / 'app' / 'utils' / 'file_utils.py', 'r', encoding='utf-8') as f:
     text = f.read()
 
 pattern = r'    full_text_clean = " ".join\(s\["text"\] for s in segments\)\n    return full_text_clean, segments\n    """\n    Return a list of folders'
@@ -8,5 +12,5 @@ replacement = '    full_text_clean = " ".join(s["text"] for s in segments)\n    
 
 text = re.sub(pattern, replacement, text)
 
-with open(r'H:\Automation\Video Forge\app\utils\file_utils.py', 'w', encoding='utf-8') as f:
+with open(_AUTOMATION_ROOT / 'Video Forge' / 'app' / 'utils' / 'file_utils.py', 'w', encoding='utf-8') as f:
     f.write(text)

@@ -1,6 +1,10 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import re
 
-with open(r"H:\Automation\Image Automation\models.py", "r") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'models.py', "r") as f:
     content = f.read()
 
 # Make ImageCount logic simpler
@@ -8,10 +12,10 @@ if "COUNT_9=" not in content:
     content = content.replace('    COUNT_4 = "x4"', '    COUNT_4 = "x4"\n    COUNT_ALL = "all"')
     content = content.replace('    ALL = [COUNT_1, COUNT_2, COUNT_3, COUNT_4]', '    ALL = [COUNT_1, COUNT_2, COUNT_3, COUNT_4, COUNT_ALL]')
 
-with open(r"H:\Automation\Image Automation\models.py", "w") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'models.py', "w") as f:
     f.write(content)
 
-with open(r"H:\Automation\Image Automation\automator.py", "r") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'automator.py', "r") as f:
     content = f.read()
 
 # If thumbnail_prompt.txt is passed in prompt_text logic 

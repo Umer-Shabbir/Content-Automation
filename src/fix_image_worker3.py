@@ -1,6 +1,9 @@
+import os
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 from pathlib import Path
 
-p = Path("H:/Automation/Image Automation/worker.py")
+p = Path(_AUTOMATION_ROOT / 'Image Automation' / 'worker.py')
 content = p.read_text(encoding="utf-8")
 
 replacement = """        # Load preset if specified
@@ -24,7 +27,7 @@ replacement = """        # Load preset if specified
         if preset_name:
             try:
                 import json
-                registry_path = Path("H:/Automation/Presets/master_presets_registry.json")
+                registry_path = Path(_PRESETS_PATH)
                 if registry_path.exists():
                     registry = json.loads(registry_path.read_text(encoding="utf-8"))
                     if preset_name in registry:
@@ -53,7 +56,7 @@ target = """        # Load preset if specified
         if preset_name:
             try:
                 import json
-                registry_path = Path("H:/Automation/Presets/master_presets_registry.json")
+                registry_path = Path(_PRESETS_PATH)
                 if registry_path.exists():
                     registry = json.loads(registry_path.read_text(encoding="utf-8"))
                     if preset_name in registry:

@@ -1,5 +1,9 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import re
-with open(r"H:\Automation\Image Automation\backend\app\routers\queue.py", "r", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'backend' / 'app' / 'routers' / 'queue.py', "r", encoding="utf-8") as f:
     content = f.read()
 
 # Fix 1: Read thumbnail_prompt before the raw_prompts empty check.
@@ -24,5 +28,5 @@ replacement = """        # Check for thumbnail prompt
 """
 content = re.sub(pattern, replacement, content, count=1)
 
-with open(r"H:\Automation\Image Automation\backend\app\routers\queue.py", "w", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'backend' / 'app' / 'routers' / 'queue.py', "w", encoding="utf-8") as f:
     f.write(content)

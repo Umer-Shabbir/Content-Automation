@@ -7,7 +7,7 @@ All backend layers are complete and fully tested with 100% test pass rate across
 
 ## 2. Directory Structure
 ```
-H:\Automation\Content Automation\
+Content Automation/
 ├── requirements.txt
 ├── venv/
 ├── src/

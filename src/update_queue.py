@@ -1,6 +1,10 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import re
 
-file_path = r"H:\Automation\Image Automation\backend\app\routers\queue.py"
+file_path = _AUTOMATION_ROOT / 'Image Automation' / 'backend' / 'app' / 'routers' / 'queue.py'
 with open(file_path, "r", encoding="utf-8") as f:
     content = f.read()
 

@@ -1,7 +1,10 @@
+import os
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import json
 from pathlib import Path
 
-REGISTRY_PATH = Path("H:/Automation/Presets/master_presets_registry.json")
+REGISTRY_PATH = Path(_PRESETS_PATH)
 
 def create():
     presets = {

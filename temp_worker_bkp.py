@@ -1,3 +1,6 @@
+import os
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[1]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 ﻿# worker.py  v6.0
 """
 AccountWorker for Google Flow Studio Batch Pro.
@@ -329,7 +332,7 @@ class AccountWorker:
         if preset_name:
             try:
                 import json
-                registry_path = Path("H:/Automation/Presets/master_presets_registry.json")
+                registry_path = Path(_PRESETS_PATH)
                 if registry_path.exists():
                     registry = json.loads(registry_path.read_text(encoding="utf-8"))
                     if preset_name in registry:

@@ -1,5 +1,9 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import re
-with open("H:/Automation/Video Forge/app/subtitles/styler.py", "r", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Video Forge' / 'app' / 'subtitles' / 'styler.py', "r", encoding="utf-8") as f:
     text = f.read()
 
 # Add speaker colors definition at the top
@@ -40,5 +44,5 @@ text = text.replace("line_text = _build_karaoke_line(esc_words, i, normal_tag, h
 text = text.replace("text = _wrap(_esc(chunk.text), max_chars)", 
 "text = _wrap(_esc(chunk.text), max_chars)\n        if chunk.speaker:\n            spk_color = _ass_color_to_bbggrr(_get_speaker_color(chunk.speaker, profile))\n            text = f\"{\\1c&H{spk_color}&}\\b1{chunk.speaker}:\\b0 {text}\"")
 
-with open("H:/Automation/Video Forge/app/subtitles/styler.py", "w", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Video Forge' / 'app' / 'subtitles' / 'styler.py', "w", encoding="utf-8") as f:
     f.write(colors_block + text)

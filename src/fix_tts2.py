@@ -1,6 +1,9 @@
+import os
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 from pathlib import Path
 
-p = Path("H:/Automation/TTS/core/file_handler.py")
+p = Path(_AUTOMATION_ROOT / 'TTS' / 'core' / 'file_handler.py')
 content = p.read_text(encoding="utf-8")
 
 replacement = """        valid_folders = []

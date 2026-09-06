@@ -1,4 +1,8 @@
-with open(r"H:\Automation\Image Automation\worker.py", "r", encoding="utf-8") as f:
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'worker.py', "r", encoding="utf-8") as f:
     content = f.read()
 
 # Update worker.py to handle "thumbnail" index
@@ -27,6 +31,6 @@ if find_str in content:
 else:
     print("Could not find replacement string")
 
-with open(r"H:\Automation\Image Automation\worker.py", "w", encoding="utf-8") as f:
+with open(_AUTOMATION_ROOT / 'Image Automation' / 'worker.py', "w", encoding="utf-8") as f:
     f.write(content)
 print("worker fixed")

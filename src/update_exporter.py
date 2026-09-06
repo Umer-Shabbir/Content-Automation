@@ -1,6 +1,10 @@
+import os
+from pathlib import Path
+_AUTOMATION_ROOT = Path(os.getenv('AUTOMATION_ROOT', Path(__file__).resolve().parents[2]))
+_PRESETS_PATH = Path(os.getenv('MASTER_PRESETS_PATH', _AUTOMATION_ROOT / 'presets' / 'master_presets_registry.json'))
 import re
 
-with open(r"H:\Automation\Content Automation\src\app\storage\exporter.py", "r") as f:
+with open(_AUTOMATION_ROOT / 'Content Automation' / 'src' / 'app' / 'storage' / 'exporter.py', "r") as f:
     content = f.read()
 
 # Add _format_thumbnail_prompt method right after _format_prompts
@@ -41,6 +45,6 @@ if save_idx > -1:
 """
     content = content[:save_idx] + save_code + content[save_idx:]
 
-with open(r"H:\Automation\Content Automation\src\app\storage\exporter.py", "w") as f:
+with open(_AUTOMATION_ROOT / 'Content Automation' / 'src' / 'app' / 'storage' / 'exporter.py', "w") as f:
     f.write(content)
 print("Updated exporter.py")
