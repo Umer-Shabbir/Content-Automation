@@ -1,0 +1,7 @@
+pytest
+pytest-asyncio
+httpx
+pydantic
+rich
+aiosqlite
+PySide6

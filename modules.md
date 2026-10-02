@@ -1,0 +1,17 @@
+# Module Implementation Tracker
+
+- [x] 01. Base Configuration & Settings System (`src/app/config/`)
+- [x] 02. SQLite Database Schema & Async Repository (`src/app/db/`)
+- [x] 03. Anthropic-Compatible AI Client & Wire Format (`src/app/ai/client.py`)
+- [x] 04. API Rate Limiter, Jitter, Backoff & Request Buffer (`src/app/ai/rate_limiter.py`, `src/app/ai/retry.py`)
+- [x] 05. Preset Models, Validation & Built-in Presets (`src/app/models/preset.py`)
+- [x] 06. Structured Prompt Builder & Templates (`src/app/prompts/`)
+- [x] 07. Deterministic Duplicate Detection & SQLite Normalization (`src/app/pipeline/duplicate_checker.py`)
+- [x] 08. Multi-Stage Pipeline Stages (Title, Script, Prompts, Critics, Final Review) (`src/app/pipeline/`)
+- [x] 09. Job Orchestrator, Batch Processor & State Machine (`src/app/orchestrator/`)
+- [x] 10. Safe Disk Storage, Path Sanitization & Content Verification (`src/app/storage/`)
+- [x] 11. Thread-safe Asynchronous Event Bus & UI Worker System (`src/app/orchestrator/event_bus.py`)
+- [x] 12. PySide6 UI: Theme, Components & Base Layout (`src/app/ui/theme.py`, `src/app/ui/components/`)
+- [x] 13. PySide6 UI Views: Dashboard, Generate, Presets, Content Browser, Settings, Logs (`src/app/ui/views/`)
+- [x] 14. Main Application Window, Integration & Signal Wiring (`src/app/ui/main_window.py`, `src/app/ui/app.py`)
+- [x] 15. Comprehensive Unit, Integration & End-to-End Test Suite (`src/tests/` - 55/55 tests passing)
