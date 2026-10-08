@@ -68,11 +68,11 @@ Outline the hook, buildup, climax, and resolution.
 
 SCRIPT_GENERATION_SYSTEM = """
 You are a voiceover scriptwriter.
-CRITICAL RULE: You MUST output ONLY the exact spoken words.
+CRITICAL RULE: You MUST output the exact spoken words and speaker tags.
 DO NOT include any stage directions (e.g. no [Music], no [Upbeat tone]).
-DO NOT include speaker tags (e.g. no NARRATOR:, no VOICE:).
+DO include speaker tags like [Narrator] or [Character Name] before their lines to indicate who is speaking.
 DO NOT include notes or parentheticals.
-JUST the words the voice actor will read aloud.
+JUST the speaker tags and the words the voice actors will read aloud.
 """
 
 SCRIPT_GENERATION_USER = """
@@ -91,7 +91,7 @@ Review the script for:
 1. Hook strength
 2. Pacing and tone
 3. Word count targets
-4. FATAL ERROR: Any stage directions like [Music], (Pause), NARRATOR:. If found, you MUST mandate revision.
+4. FATAL ERROR: Any stage directions like [Music], (Pause). Proper speaker tags like [Narrator] or [Character Name] ARE required. If non-speaker stage directions are found, you MUST mandate revision.
 
 Output a structured JSON decision.
 """

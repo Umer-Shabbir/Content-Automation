@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 from app.models.enums import JobState, ErrorCategory
@@ -16,7 +16,7 @@ class JobProgress(BaseModel):
     current_stage: JobState = JobState.QUEUED
     percent_complete: float = 0.0
     stage_message: str = "Waiting in queue..."
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Job(BaseModel):
     id: str
@@ -29,7 +29,7 @@ class Job(BaseModel):
     max_retries: int = 3
     error_category: Optional[ErrorCategory] = None
     last_error: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     output_directory: Optional[str] = None
     metrics: List[StageMetric] = Field(default_factory=list)
@@ -37,7 +37,7 @@ class Job(BaseModel):
 class Batch(BaseModel):
     id: str
     topic: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: str = "IN_PROGRESS"
     total_jobs: int = 0
     completed_jobs: int = 0

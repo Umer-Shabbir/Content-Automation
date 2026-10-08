@@ -15,7 +15,7 @@ class ScriptRules(BaseModel):
     pacing: str = "Steady, building anticipation"
     target_duration_minutes: int = Field(default=10, ge=1, le=60)
     target_words: int = Field(default=1300, ge=100, le=10000)
-    strict_voiceover_only: bool = Field(default=True, description="Enforce zero metadata, stage directions, or labels")
+    strict_voiceover_only: bool = Field(default=True, description="Enforce zero metadata or stage directions other than speaker tags")
 
 class ImageRules(BaseModel):
     visual_style: str = "Cinematic, realistic, moody lighting"
@@ -37,7 +37,7 @@ class ContentPreset(BaseModel):
     description: str = "Money Chuck house style: White-background stick-figure doodle explainers about worst business decisions, scams, and corporate collapses."
     is_builtin: bool = True
     output_dir: str = ""
-    voice_name: str = Field(default="en_us_male_dry_narrator", description="Target TTS voice identifier written to metadata.json")
+    voice_name: str = Field(default="en_us_male_dry_narrator", description="Target TTS voice identifier written to project.json")
     title_rules: TitleRules = Field(default_factory=lambda: TitleRules(
         title_structure="Top 10 Times ONE [singular trigger] [DESTROYED/KILLED/SAVED] a [beloved entity] Explained Like You're 5",
         hook_style="Singular-agent schadenfreude: ONE decision, ONE ad, ONE mistake, ONE CEO. Caps-lock trigger verb.",
@@ -80,10 +80,17 @@ def load_builtin_presets() -> dict:
     presets = {}
     if registry_path.exists():
         try:
+            import json
             data = json.loads(registry_path.read_text(encoding="utf-8"))
             for slug, item in data.items():
                 ca = item.get("content_automation", {})
                 ia = item.get("image_automation", {})
+                
+                # Check for list structures in forbidden patterns
+                forbidden = ca.get("forbidden_patterns", ["You won't believe", "Shocking truth", "Gone wrong"])
+                if isinstance(forbidden, str):
+                    forbidden = [f.strip() for f in forbidden.split(",")]
+                    
                 presets[slug] = ContentPreset(
                     name=slug,
                     description=item.get("description", ""),
@@ -92,6 +99,7 @@ def load_builtin_presets() -> dict:
                     title_rules=TitleRules(
                         title_structure=ca.get("title_structure", "Clear and intriguing title"),
                         hook_style=ca.get("hook_style", "High curiosity and tension"),
+                        forbidden_patterns=forbidden,
                         curiosity_level=9
                     ),
                     script_rules=ScriptRules(
@@ -104,13 +112,16 @@ def load_builtin_presets() -> dict:
                     ),
                     image_rules=ImageRules(
                         visual_style=ia.get("visual_style", "Cinematic"),
+                        cinematic_style=ia.get("cinematic_style", "Cinematic layout"),
                         aspect_ratio=ia.get("aspect_ratio", "16:9"),
-                        scene_density=ca.get("scene_density", "1 visual scene every 3-4 sentences")
+                        scene_density=ca.get("scene_density", "1 visual scene every 3-4 sentences"),
+                        character_consistency=ia.get("character_consistency", ""),
+                        environment_consistency=ia.get("environment_consistency", "")
                     ),
                     reviewer_rules=ReviewerRules(min_quality_score=8.5, max_revisions=3)
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error loading presets: {e}")
     if "money_chuck" not in presets:
         presets["money_chuck"] = ContentPreset()
     return presets

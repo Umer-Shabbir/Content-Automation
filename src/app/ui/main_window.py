@@ -122,7 +122,7 @@ class PipelineWorker(QThread):
             logger.info(f"Starting real generation pipeline for topic: '{self.topic}' with preset '{self.preset_name}' (generate_prompts={self.generate_prompts})...")
             package = await pipeline.run(topic=self.topic, preset=preset, generate_prompts=self.generate_prompts)
 
-            # 4. Export the clean files (title.txt, script.txt, metadata.json, and conditionally prompts.txt)
+            # 4. Export the clean files (title.txt, script.txt, project.json, and conditionally prompts.txt)
             exported_path = ContentExporter.export_package(
                 package=package,
                 base_output_dir=effective_output_dir,
@@ -271,6 +271,7 @@ class MainWindow(QMainWindow):
         # Generate action -> start worker thread
         self.generate_view.start_generation_requested.connect(self._handle_start_generation)
         self.generate_view.generate_prompts_for_folders_requested.connect(self._handle_generate_prompts_for_folders)
+        self.generate_view.generate_prompts_for_master_directory_requested.connect(self._handle_generate_prompts_for_master_directory)
 
         # History item selected
         self.history_view.job_selected.connect(self._handle_history_job_selected)
@@ -294,6 +295,11 @@ class MainWindow(QMainWindow):
         """Handle execution of Round 2: Generating Image Prompts for existing Project Folders"""
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         settings_data = self._get_current_settings()
+
+    def _handle_generate_prompts_for_master_directory(self, master_dir: str):
+        """Pass the master directory through to the folder handler if it had valid folders.
+        Note: The actual scanning and emitting of the folder list is done by the view."""
+        pass # this is handled directly by emitting generate_prompts_for_folders_requested in the view
 
         for folder_path in folder_paths:
             job_id = f"job-prmpt-{uuid.uuid4().hex[:6]}"
@@ -321,6 +327,7 @@ class MainWindow(QMainWindow):
             worker.start()
 
         self._refresh_dashboard()
+
 
     def _handle_start_generation(self, topic: str, presets: list, count: int, custom_output_dir: str = "", generate_prompts: bool = False):
         """Handle real generation request and launch non-blocking worker threads."""
@@ -357,37 +364,6 @@ class MainWindow(QMainWindow):
 
         self._refresh_dashboard()
 
-    def _handle_generate_prompts_for_folders(self, folder_paths: list):
-        """Handle execution of Round 2: Generating Image Prompts for existing Project Folders"""
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        settings_data = self._get_current_settings()
-
-        for folder_path in folder_paths:
-            job_id = f"job-prmpt-{uuid.uuid4().hex[:6]}"
-            folder_name = os.path.basename(folder_path)
-            job_data = {
-                "id": job_id,
-                "topic": f"Round 2 Prompts: {folder_name}",
-                "preset": "auto-match",
-                "status": "RUNNING",
-                "created_at": now_str,
-                "output": f"Executing Round 2 Image Prompts Generation for folder '{folder_name}'..."
-            }
-            self.jobs_cache.insert(0, job_data)
-            self.event_bus.publish_sync("job_started", job_data)
-
-            # Launch async folder prompt worker
-            worker = FolderPromptWorker(
-                folder_path=folder_path,
-                settings_data=settings_data,
-                parent=self
-            )
-            worker.finished_signal.connect(lambda folder, res, j_id=job_id: self._on_worker_finished(j_id, res))
-            worker.failed_signal.connect(lambda folder, err, j_id=job_id: self._on_worker_failed(j_id, folder, err))
-            self._active_workers.append(worker)
-            worker.start()
-
-        self._refresh_dashboard()
 
     def _on_worker_finished(self, job_id: str, result_payload: dict):
         output_text = f"Title: {result_payload.get('title')}\n\nScript:\n{result_payload.get('script')}\n\nExported to folder:\n{result_payload.get('output_path')}"

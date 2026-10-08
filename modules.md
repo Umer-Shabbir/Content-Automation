@@ -14,4 +14,4 @@
 - [x] 12. PySide6 UI: Theme, Components & Base Layout (`src/app/ui/theme.py`, `src/app/ui/components/`)
 - [x] 13. PySide6 UI Views: Dashboard, Generate, Presets, Content Browser, Settings, Logs (`src/app/ui/views/`)
 - [x] 14. Main Application Window, Integration & Signal Wiring (`src/app/ui/main_window.py`, `src/app/ui/app.py`)
-- [x] 15. Comprehensive Unit, Integration & End-to-End Test Suite (`src/tests/` - 55/55 tests passing)
+- [x] 15. Comprehensive Unit, Integration & End-to-End Test Suite (`src/tests/` - 64/64 tests passing)

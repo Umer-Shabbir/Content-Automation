@@ -1,6 +1,6 @@
 import asyncio
 from typing import Any, Callable, Dict, Optional, Awaitable
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from .event_bus import default_bus
@@ -20,12 +20,12 @@ class Job:
         self.state = JobState.PENDING
         self.result: Optional[Any] = None
         self.error: Optional[str] = None
-        self.created_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def update_state(self, new_state: str, result: Any = None, error: str = None):
         self.state = new_state
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
         if result is not None:
             self.result = result
         if error is not None:

@@ -120,16 +120,19 @@ def test_exporter_creates_files(temp_output_dir, sample_package):
     assert "High detail 8k render" in prompts_content
     assert "SCENE 2" in prompts_content
 
-    assert (path / "metadata.json").exists()
-    metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
+    assert (path / "project.json").exists()
+    metadata = json.loads((path / "project.json").read_text(encoding="utf-8"))
     assert metadata["title"] == sample_package.title
     assert metadata["quality_score"] == 0.95
+    assert metadata["stage"] == "SCRIPT_READY"
+    assert metadata["status"] == "PENDING"
 
 def test_exporter_no_metadata(temp_output_dir, sample_package):
     export_path = ContentExporter.export_package(sample_package, base_output_dir=str(temp_output_dir), include_metadata=False)
 
     path = Path(export_path)
     assert (path / "title.txt").exists()
+    assert not (path / "project.json").exists()
     assert not (path / "metadata.json").exists()
 
 def test_exporter_collision_handling(temp_output_dir, sample_package):

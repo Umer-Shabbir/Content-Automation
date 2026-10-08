@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class FolderPromptWorker(QThread):
     """
-    Asynchronously processes an existing project folder (which already has script.txt, audio.wav, metadata.json)
+    Asynchronously processes an existing project folder (which already has script.txt, audio.wav, project.json)
     and generates the style-locked scene image prompts (prompts.txt) for Round 2.
     """
     finished_signal = Signal(str, dict)  # folder_path, result_payload
@@ -50,9 +50,12 @@ class FolderPromptWorker(QThread):
             if not script_text:
                 raise ValueError("script.txt is empty.")
 
-            # Check for optional parsed SRT
+            # Check for optional parsed SRT (audio.srt or transcript.srt)
             srt_chunks = []
-            srt_file = folder / "audio.srt"
+            srt_file = folder / "transcript.srt"
+            if not srt_file.exists():
+                srt_file = folder / "audio.srt"
+
             if srt_file.exists():
                 from app.utils.srt_parser import SRTParser
                 try:
@@ -61,10 +64,12 @@ class FolderPromptWorker(QThread):
                 except Exception as e:
                     logger.warning(f"Failed to parse {srt_file.name}: {e}")
 
-            # Read metadata.json for preset_name and topic
+            # Read project.json for preset_name and topic
             preset_name = "money_chuck"
             topic = folder.name
-            meta_file = folder / "metadata.json"
+            meta_file = folder / "project.json"
+            if not meta_file.exists():
+                meta_file = folder / "metadata.json"
             if meta_file.exists():
                 try:
                     meta_data = json.loads(meta_file.read_text(encoding="utf-8"))

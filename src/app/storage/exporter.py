@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import re
 from typing import Optional
@@ -65,6 +65,27 @@ class ContentExporter:
         return "\n".join(lines).strip()
 
     @staticmethod
+    def _format_thumbnail_prompt(package: GenerationPackage, preset: Optional[ContentPreset] = None) -> str:
+        """
+        Formats a dedicated thumbnail prompt based on the title, topic, and art style.
+        """
+        lines = []
+        lines.append(f"Title: {package.title}")
+        lines.append(f"Topic: {package.topic}")
+        if package.continuity and package.continuity.art_style_anchor:
+            lines.append(f"Art Style Anchor: {package.continuity.art_style_anchor}")
+        
+        # Build the actual prompt
+        prompt = f"A compelling, high-contrast YouTube thumbnail for a video titled '{package.title}'. "
+        if package.continuity and package.continuity.art_style_anchor:
+            prompt += f"Style: {package.continuity.art_style_anchor}. "
+        
+        prompt += "The image should have clear focal points, vibrant colors, and be visually striking. No text in the image."
+        
+        lines.append(f"\nThumbnail Prompt: {prompt}\n")
+        return "\n".join(lines).strip()
+
+    @staticmethod
     def _get_unique_dir(base_path: Path, folder_name: str) -> Path:
         """
         Resolves folder name collisions by appending (1), (2), etc.
@@ -120,28 +141,34 @@ class ContentExporter:
             prompts_content = cls._format_prompts(package)
             (target_dir / "prompts.txt").write_text(prompts_content, encoding="utf-8")
 
-        # 4. Write metadata.json
+        # 3.5 Write thumbnail_prompt.txt
+        thumbnail_content = cls._format_thumbnail_prompt(package, preset)
+        (target_dir / "thumbnail_prompt.txt").write_text(thumbnail_content, encoding="utf-8")
+
+        # 4. Write project.json (formerly metadata.json)
         if include_metadata:
             meta_dict = {
+                "stage": "SCRIPT_READY",
+                "status": "PENDING",
                 "topic": package.topic,
                 "preset_name": preset.name if preset and preset.name else package.preset_name,
                 "voice_name": preset.voice_name if preset and hasattr(preset, 'voice_name') and preset.voice_name else getattr(package, 'voice_name', 'en_us_male_dry_narrator'),
                 "title": package.title,
                 "normalized_title": package.normalized_title,
                 "total_words": package.total_words,
-                "estimated_duration_sec": float(package.estimated_duration_sec),
-                "quality_score": float(package.quality_score),
+                "estimated_duration_sec": float(package.estimated_duration_sec) if package.estimated_duration_sec else 0.0,
+                "quality_score": float(package.quality_score) if package.quality_score else 0.0,
                 "reviewer_notes": package.reviewer_notes,
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             }
-            (target_dir / "metadata.json").write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
+            (target_dir / "project.json").write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
 
         return str(target_dir)
 
     @classmethod
     def write_prompts_to_existing_project(cls, project_dir: Path, package: GenerationPackage) -> bool:
         """
-        Appends or updates prompts.txt and metadata.json in an existing project folder
+        Appends or updates prompts.txt and project.json in an existing project folder
         after audio has been transcribed.
         """
         if not project_dir.exists() or not package.prompts:
@@ -150,12 +177,25 @@ class ContentExporter:
         prompts_content = cls._format_prompts(package)
         (project_dir / "prompts.txt").write_text(prompts_content, encoding="utf-8")
 
-        meta_path = project_dir / "metadata.json"
+        # Support both metadata.json (legacy) and project.json (new format)
+        meta_path = project_dir / "project.json"
+        if not meta_path.exists():
+            meta_path = project_dir / "metadata.json"
+
         if meta_path.exists():
             try:
                 meta_dict = json.loads(meta_path.read_text(encoding="utf-8"))
+                meta_dict["stage"] = "PROMPTS_READY"
                 meta_dict["prompts_generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                meta_path.write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
+                # When updating, if it was legacy metadata.json, save as project.json instead
+                new_meta_path = project_dir / "project.json"
+                new_meta_path.write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
+                # Optionally remove the old metadata.json if it exists and we're converting
+                if meta_path.name == "metadata.json" and new_meta_path.exists():
+                    try:
+                        meta_path.unlink()
+                    except OSError:
+                        pass
             except Exception:
                 pass
         return True
@@ -163,3 +203,4 @@ class ContentExporter:
     def export(self, package: GenerationPackage, include_metadata: bool = True) -> str:
         """Instance method adapter for export_package."""
         return self.export_package(package, base_output_dir=self.base_output_dir, include_metadata=include_metadata)
+

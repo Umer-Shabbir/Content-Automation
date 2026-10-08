@@ -29,6 +29,8 @@ class GenerateView(QWidget):
 
     start_generation_requested = Signal(str, list, int, str, bool)  # topic, list of presets, count, custom_output_dir, generate_prompts
     generate_prompts_for_folders_requested = Signal(list)  # list of folder path strings to generate prompts for
+    generate_prompts_for_folders_requested = Signal(list)  # list of folder path strings to generate prompts for
+    generate_prompts_for_master_directory_requested = Signal(str)  # master_dir path
     start_generation = start_generation_requested  # Alias for compatibility
 
     def __init__(self, parent=None):
@@ -128,7 +130,7 @@ class GenerateView(QWidget):
         round2_layout.setContentsMargins(20, 20, 20, 20)
         round2_layout.setSpacing(12)
 
-        desc_lbl = QLabel("Select or paste project folders (containing script.txt and metadata.json) after TTS transcription to generate audio-synced scene image prompts:")
+        desc_lbl = QLabel("Select or paste project folders (containing script.txt and project.json) after TTS transcription to generate audio-synced scene image prompts, or scan a master directory for 'VOICED' projects:")
         desc_lbl.setStyleSheet("font-weight: normal; color: #a6adc8; font-size: 12px;")
         desc_lbl.setWordWrap(True)
         round2_layout.addWidget(desc_lbl)
@@ -139,7 +141,12 @@ class GenerateView(QWidget):
         self.btn_select_folders.setStyleSheet("font-size: 13px; font-weight: bold; padding: 10px 20px; background-color: #89b4fa; color: #11111b;")
         self.btn_select_folders.clicked.connect(self._on_select_project_folders)
 
+        self.btn_scan_master = QPushButton("🔍 Scan Master Directory (VOICED)")
+        self.btn_scan_master.setStyleSheet("font-size: 13px; font-weight: bold; padding: 10px 20px; background-color: #f9e2af; color: #11111b; margin-left: 10px;")
+        self.btn_scan_master.clicked.connect(self._on_scan_master_directory)
+
         round2_btn_row.addWidget(self.btn_select_folders)
+        round2_btn_row.addWidget(self.btn_scan_master)
         round2_btn_row.addStretch()
         round2_layout.addLayout(round2_btn_row)
 
@@ -207,3 +214,44 @@ class GenerateView(QWidget):
                 if valid_folders:
                     self.generate_prompts_for_folders_requested.emit(valid_folders)
                     QMessageBox.information(self, "Queued for Prompts", f"Queued {len(valid_folders)} project folder(s) for audio-synchronized image prompt generation!")
+
+    def _on_scan_master_directory(self):
+        """Scan a master directory to find projects in 'VOICED' stage to process."""
+        output_base = self.output_dir_input.text().strip() or r"H:\Automation\output"
+
+        master_dir = QFileDialog.getExistingDirectory(
+            self,
+            "Select Master Directory to Scan for VOICED projects",
+            output_base
+        )
+
+        if not master_dir:
+            return
+
+        import json
+        master_path = Path(master_dir)
+        valid_folders = []
+
+        # Scan immediate subdirectories
+        for folder in master_path.iterdir():
+            if not folder.is_dir():
+                continue
+
+            meta_path = folder / "project.json"
+            if not meta_path.exists():
+                meta_path = folder / "metadata.json"
+
+            if meta_path.exists():
+                try:
+                    data = json.loads(meta_path.read_text(encoding="utf-8"))
+                    # If project is in VOICED stage and has a script
+                    if data.get("stage") == "VOICED" and (folder / "script.txt").exists():
+                        valid_folders.append(str(folder))
+                except Exception:
+                    pass
+
+        if valid_folders:
+            self.generate_prompts_for_folders_requested.emit(valid_folders)
+            QMessageBox.information(self, "Master Directory Scan", f"Found and queued {len(valid_folders)} project(s) in 'VOICED' stage!")
+        else:
+            QMessageBox.information(self, "Master Directory Scan", "No projects found in 'VOICED' stage with script.txt.")

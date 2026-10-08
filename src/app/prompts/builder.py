@@ -61,7 +61,7 @@ class PromptBuilder:
             f"Tone: {rules.tone}\n"
             f"Pacing: {rules.pacing}\n"
             f"Target Word Count: {rules.target_words}\n"
-            f"Strict Voiceover Only: {'YES! NO STAGE DIRECTIONS OR TAGS ALLOWED.' if rules.strict_voiceover_only else 'Normal Voiceover'}"
+            f"Strict Voiceover Only: {'YES! NO STAGE DIRECTIONS ALLOWED. SPEAKER TAGS (e.g. [Narrator]) ARE REQUIRED.' if rules.strict_voiceover_only else 'Normal Voiceover'}"
         )
         user_content = templates.SCRIPT_GENERATION_USER.format(
             topic=topic, title=title, rules=rules_text
