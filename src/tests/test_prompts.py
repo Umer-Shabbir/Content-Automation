@@ -1,9 +1,41 @@
 import pytest
 import json
-from app.prompts.parser import extract_json, extract_tag_content
+from app.prompts.parser import extract_json, extract_tag_content, extract_script_text
 from app.prompts.builder import PromptBuilder
 from app.models.preset import TitleRules, ScriptRules, ImageRules, ReviewerRules, ContentPreset
 from app.models.generation import GenerationPackage, VisualContinuityState, ScenePrompt
+
+def test_extract_script_text_raw_narration():
+    text = "They say time heals all wounds, but what does ten years do to a promise?"
+    assert extract_script_text(text) == text
+
+def test_extract_script_text_from_json_refined_script():
+    json_text = json.dumps({
+        "review": {"hook_strength": "Needs Improvement"},
+        "decision": "REVISION REQUIRED",
+        "refined_script": "They say time heals all wounds, but what does ten years do to a promise?"
+    })
+    extracted = extract_script_text(json_text)
+    assert extracted == "They say time heals all wounds, but what does ten years do to a promise?"
+
+def test_extract_script_text_from_json_review_metadata_only():
+    json_text = json.dumps({
+        "review": {"hook_strength": "Needs Improvement"},
+        "decision": "REVISION REQUIRED",
+        "recommendations": ["Make it shorter"]
+    })
+    fallback = "Original draft script text here."
+    extracted = extract_script_text(json_text, fallback=fallback)
+    assert extracted == fallback
+
+def test_extract_script_text_markdown_wrapped():
+    text = "```\nIn 1970, a legendary story was told.\n```"
+    assert extract_script_text(text) == "In 1970, a legendary story was told."
+
+def test_extract_script_text_xml_tagged():
+    text = "<script>\nIn 1970, a legendary story was told.\n</script>"
+    assert extract_script_text(text) == "In 1970, a legendary story was told."
+
 
 def test_extract_json_markdown():
     text = "Here is the result:\n```json\n{\"title\": \"Test\"}\n```\nHope it helps!"

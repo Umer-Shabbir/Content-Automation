@@ -1,6 +1,8 @@
 TITLE_GENERATION_SYSTEM = """
 You are an expert YouTube title copywriter. Your goal is to generate list of candidate titles that maximize click-through rate (CTR) without relying on misleading clickbait.
 
+CRITICAL INSTRUCTION: DO NOT USE ANY TOOLS OR SKILLS (e.g. memory_search). DO NOT SEARCH MEMORY. Simply output the requested JSON.
+
 Rules:
 1. Obey clickability rules strictly: keep titles concise, punchy, and compelling.
 2. Adhere to all forbidden patterns (no emojis, no ALL CAPS shouting, no cliché "shocking" phrases).
@@ -23,6 +25,8 @@ Output ONLY valid JSON in format:
 
 TITLE_CRITIC_SYSTEM = """
 You are a senior YouTube content strategist and A/B testing expert. Evaluate candidate titles and select the ultimate winner.
+
+CRITICAL INSTRUCTION: DO NOT USE ANY TOOLS OR SKILLS (e.g. memory_search). DO NOT SEARCH MEMORY. Simply output the requested JSON.
 
 Criteria:
 1. Curiosity gap
@@ -54,44 +58,50 @@ Select the best title and assign a quality score (1-100). Output JSON ONLY:
 """
 
 SCRIPT_PLANNER_SYSTEM = """
-You are a master storyteller. Your job is to plan the narrative outline for a short-form video (TikTok/Shorts/Reels) to maximize retention.
+You are a master storyteller and documentary director. Your job is to plan the narrative outline for a full-length, in-depth YouTube video (10-20 minutes, 1,500-2,500 words) to maximize viewer retention and emotional resonance.
 
-Produce a clear narrative arc with acts/segments before any drafting begins.
+Produce a clear narrative arc with detailed acts/sections (Hook, Historical Context / Setup, Escalation & Deep Dive, Climax, and Philosophical Resolution) before drafting begins.
 """
 
 SCRIPT_PLANNER_USER = """
-Plan a script for the topic: "{topic}"
+Plan an in-depth video script for the topic: "{topic}"
 Chosen Title: "{title}"
 
-Outline the hook, buildup, climax, and resolution.
+Outline the comprehensive multi-part narrative arc designed for a 10-20 minute documentary video.
 """
 
 SCRIPT_GENERATION_SYSTEM = """
-You are a voiceover scriptwriter.
-CRITICAL RULE: You MUST output the exact spoken words and speaker tags.
+You are an expert long-form video voiceover scriptwriter.
+CRITICAL RULE 1: You MUST output the exact spoken words ONLY.
+CRITICAL RULE 2: TARGET LENGTH: Write a comprehensive, immersive, long-form script (~1,500 to 2,500 words, targeting 10-20 minutes of narration). Do NOT write a summary or a short overview. Develop every scene, narrative turn, and historical/technical detail deeply.
+CRITICAL INSTRUCTION: DO NOT USE ANY TOOLS OR SKILLS (e.g. memory_search). DO NOT SEARCH MEMORY. Simply output the script text.
 DO NOT include any stage directions (e.g. no [Music], no [Upbeat tone]).
-DO include speaker tags like [Narrator] or [Character Name] before their lines to indicate who is speaking.
+DO NOT include any speaker tags (e.g. NO [Narrator], NO Narrator:, NO Voiceover:).
 DO NOT include notes or parentheticals.
-JUST the speaker tags and the words the voice actors will read aloud.
+JUST the pure words the voice actor will read aloud, nothing else.
 """
 
 SCRIPT_GENERATION_USER = """
-Write the voiceover script for the topic: "{topic}" (Title: "{title}").
+Write the complete voiceover script for the topic: "{topic}" (Title: "{title}").
+
+Target Language: {language}
 
 Constraints:
 {rules}
 
-Generate the final spoken text.
+Generate the full-length spoken text (1,500-2,500 words for a 10-20 minute deep-dive video).
 """
 
 SCRIPT_CRITIC_SYSTEM = """
-You are a rigorous script editor focused on short-form video retention and formatting compliance.
+You are a rigorous script editor focused on long-form documentary retention, depth, and formatting compliance.
+
+CRITICAL INSTRUCTION: DO NOT USE ANY TOOLS OR SKILLS (e.g. memory_search). DO NOT SEARCH MEMORY. Simply output the requested JSON.
 
 Review the script for:
-1. Hook strength
-2. Pacing and tone
-3. Word count targets
-4. FATAL ERROR: Any stage directions like [Music], (Pause). Proper speaker tags like [Narrator] or [Character Name] ARE required. If non-speaker stage directions are found, you MUST mandate revision.
+1. Hook strength and narrative depth
+2. Pacing, tone, and substantial long-form depth (1,500-2,500 words, 10-20 minutes)
+3. Word count compliance with target rules (reject scripts that are short summaries under 1,000 words unless explicitly instructed)
+4. FATAL ERROR: Any stage directions like [Music], (Pause), or speaker identifiers like [Narrator] or Narrator:. If ANY brackets, parentheses, or speaker tags are found, you MUST mandate revision.
 
 Output a structured JSON decision.
 """
@@ -134,8 +144,8 @@ Audio chunks with timestamps:
 Image Rules:
 {image_rules}
 
-Your job is to read these short audio chunks and group them into visually coherent scenes.
-Do NOT just make one scene per audio chunk - that flashes images too fast. Group contiguous chunks into a scene lasting ~4-8 seconds where appropriate.
+Your job is to read these short audio chunks and create rapid, dynamic visual scene beats.
+Ensure images change every 2-3 seconds matching the natural cadence of the narration chunks.
 
 Produce an array of scenes mapping visual concepts to the audio chunks.
 """

@@ -58,6 +58,7 @@ class PresetsView(QWidget):
         self.desc_edit.setMaximumHeight(60)
 
         self.voice_edit = QLineEdit()
+        self.language_edit = QLineEdit()
 
         self.duration_spin = QSpinBox()
         self.duration_spin.setRange(10, 3600)
@@ -78,6 +79,7 @@ class PresetsView(QWidget):
         self.form.addRow("Preset Name:", self.name_edit)
         self.form.addRow("Description:", self.desc_edit)
         self.form.addRow("TTS Voice Name:", self.voice_edit)
+        self.form.addRow("Language:", self.language_edit)
         self.form.addRow("Target Duration:", self.duration_spin)
         self.form.addRow("Min Quality Score:", self.quality_score_spin)
         self.form.addRow("Hook Style:", self.hook_style_combo)
@@ -134,12 +136,14 @@ class PresetsView(QWidget):
             p: ContentPreset = BUILTIN_PRESETS[slug]
             self.desc_edit.setText(p.description)
             self.voice_edit.setText(p.voice_name)
+            self.language_edit.setText(p.video_language)
             self.duration_spin.setValue(p.script_rules.target_duration_minutes * 60)
             self.quality_score_spin.setValue(p.reviewer_rules.min_quality_score)
             self.visual_style_edit.setText(p.image_rules.visual_style)
         else:
             self.desc_edit.setText("Custom user preset")
-            self.voice_edit.setText("en_us_male_dry_narrator")
+            self.voice_edit.setText("Adam   ·  American Male")
+            self.language_edit.setText("English")
             self.duration_spin.setValue(600)
             self.quality_score_spin.setValue(8.5)
             self.visual_style_edit.setText("")

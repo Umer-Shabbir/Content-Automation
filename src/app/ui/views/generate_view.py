@@ -58,8 +58,15 @@ class GenerateView(QWidget):
 
         # Topic
         self.topic_input = QLineEdit()
-        self.topic_input.setPlaceholderText("Enter topic concept (e.g. Ancient Rome, AI Ethics, Cyberpunk City)")
-        form_layout.addRow("Topic:", self.topic_input)
+        self.topic_input.setPlaceholderText("Enter custom topic (Optional — leave blank to auto-pick from preset niche topics)")
+        topic_hint = QLabel("💡 Leaving Topic blank automatically generates niche-consistent ideas from each preset's curated topic pool.")
+        topic_hint.setStyleSheet("font-size: 11px; color: #a6adc8; font-style: italic;")
+
+        topic_layout = QVBoxLayout()
+        topic_layout.setSpacing(4)
+        topic_layout.addWidget(self.topic_input)
+        topic_layout.addWidget(topic_hint)
+        form_layout.addRow("Topic:", topic_layout)
 
         # Dynamic Preset Checkboxes inside a Scrollable Grid
         presets_scroll = QScrollArea()
@@ -164,10 +171,6 @@ class GenerateView(QWidget):
 
     def _on_start_clicked(self):
         topic = self.topic_input.text().strip()
-        if not topic:
-            QMessageBox.warning(self, "Missing Topic", "Please enter a topic before starting generation.")
-            return
-
         presets = [slug for slug, cb in self.preset_checkboxes.items() if cb.isChecked()]
         if not presets:
             QMessageBox.warning(self, "No Preset Selected", "Please select at least one preset checkbox.")

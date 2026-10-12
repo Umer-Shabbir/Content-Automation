@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread
 from app.ui.views.dashboard_view import DashboardView
+from app.ui.views.research_view import ResearchView
 from app.ui.views.generate_view import GenerateView
 from app.ui.views.history_view import HistoryView
 from app.ui.views.presets_view import PresetsView
@@ -106,10 +107,12 @@ class PipelineWorker(QThread):
             fallback_dir = self.settings_data.get("output_dir", "output")
             effective_output_dir = self.custom_output_dir.strip() if self.custom_output_dir else fallback_dir
 
-            preset = ContentPreset(
-                name=self.preset_name,
-                output_dir=effective_output_dir
-            )
+            from app.models.preset import BUILTIN_PRESETS
+            import copy
+
+            base_preset = BUILTIN_PRESETS.get(self.preset_name, ContentPreset(name=self.preset_name))
+            preset = copy.deepcopy(base_preset)
+            preset.output_dir = effective_output_dir
 
             # 3. Instantiate and run pipeline
             pipeline = GenerationPipeline()
@@ -197,6 +200,10 @@ class MainWindow(QMainWindow):
         self.btn_nav_dashboard.setCheckable(True)
         self.btn_nav_dashboard.setChecked(True)
 
+        self.btn_nav_research = QPushButton("Research")
+        self.btn_nav_research.setObjectName("nav_button")
+        self.btn_nav_research.setCheckable(True)
+
         self.btn_nav_generate = QPushButton("Generate")
         self.btn_nav_generate.setObjectName("nav_button")
         self.btn_nav_generate.setCheckable(True)
@@ -220,13 +227,15 @@ class MainWindow(QMainWindow):
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.nav_group.addButton(self.btn_nav_dashboard, 0)
-        self.nav_group.addButton(self.btn_nav_generate, 1)
-        self.nav_group.addButton(self.btn_nav_history, 2)
-        self.nav_group.addButton(self.btn_nav_presets, 3)
-        self.nav_group.addButton(self.btn_nav_settings, 4)
-        self.nav_group.addButton(self.btn_nav_logs, 5)
+        self.nav_group.addButton(self.btn_nav_research, 1)
+        self.nav_group.addButton(self.btn_nav_generate, 2)
+        self.nav_group.addButton(self.btn_nav_history, 3)
+        self.nav_group.addButton(self.btn_nav_presets, 4)
+        self.nav_group.addButton(self.btn_nav_settings, 5)
+        self.nav_group.addButton(self.btn_nav_logs, 6)
 
         sidebar_layout.addWidget(self.btn_nav_dashboard)
+        sidebar_layout.addWidget(self.btn_nav_research)
         sidebar_layout.addWidget(self.btn_nav_generate)
         sidebar_layout.addWidget(self.btn_nav_history)
         sidebar_layout.addWidget(self.btn_nav_presets)
@@ -240,6 +249,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
 
         self.dashboard_view = DashboardView()
+        self.research_view = ResearchView()
         self.generate_view = GenerateView()
         self.history_view = HistoryView()
         self.presets_view = PresetsView()
@@ -247,11 +257,12 @@ class MainWindow(QMainWindow):
         self.logs_view = LogsView()
 
         self.stack.addWidget(self.dashboard_view)  # 0
-        self.stack.addWidget(self.generate_view)   # 1
-        self.stack.addWidget(self.history_view)    # 2
-        self.stack.addWidget(self.presets_view)    # 3
-        self.stack.addWidget(self.settings_view)   # 4
-        self.stack.addWidget(self.logs_view)       # 5
+        self.stack.addWidget(self.research_view)   # 1
+        self.stack.addWidget(self.generate_view)   # 2
+        self.stack.addWidget(self.history_view)    # 3
+        self.stack.addWidget(self.presets_view)    # 4
+        self.stack.addWidget(self.settings_view)   # 5
+        self.stack.addWidget(self.logs_view)       # 6
 
         main_layout.addWidget(self.stack)
 
@@ -296,11 +307,6 @@ class MainWindow(QMainWindow):
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         settings_data = self._get_current_settings()
 
-    def _handle_generate_prompts_for_master_directory(self, master_dir: str):
-        """Pass the master directory through to the folder handler if it had valid folders.
-        Note: The actual scanning and emitting of the folder list is done by the view."""
-        pass # this is handled directly by emitting generate_prompts_for_folders_requested in the view
-
         for folder_path in folder_paths:
             job_id = f"job-prmpt-{uuid.uuid4().hex[:6]}"
             folder_name = os.path.basename(folder_path)
@@ -328,30 +334,43 @@ class MainWindow(QMainWindow):
 
         self._refresh_dashboard()
 
+    def _handle_generate_prompts_for_master_directory(self, master_dir: str):
+        """Pass the master directory through to the folder handler if it had valid folders.
+        Note: The actual scanning and emitting of the folder list is done by the view."""
+        pass # this is handled directly by emitting generate_prompts_for_folders_requested in the view
 
     def _handle_start_generation(self, topic: str, presets: list, count: int, custom_output_dir: str = "", generate_prompts: bool = False):
         """Handle real generation request and launch non-blocking worker threads."""
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         settings_data = self._get_current_settings()
 
-        for preset in presets:
-            for _ in range(count):
+        from app.models.preset import BUILTIN_PRESETS
+
+        for preset_slug in presets:
+            preset_obj = BUILTIN_PRESETS.get(preset_slug)
+            for idx in range(count):
+                # Auto-sample from preset's niche topic pool if user left topic blank
+                if not topic or not topic.strip():
+                    item_topic = preset_obj.get_topic(idx) if preset_obj else f"{preset_slug.replace('_', ' ').title()} Story"
+                else:
+                    item_topic = topic.strip()
+
                 job_id = f"job-{uuid.uuid4().hex[:6]}"
                 job_data = {
                     "id": job_id,
-                    "topic": topic,
-                    "preset": preset,
+                    "topic": item_topic,
+                    "preset": preset_slug,
                     "status": "RUNNING",
                     "created_at": now_str,
-                    "output": f"Executing generation pipeline for '{topic}' under '{preset}'..."
+                    "output": f"Executing generation pipeline for '{item_topic}' under '{preset_slug}'..."
                 }
                 self.jobs_cache.insert(0, job_data)
                 self.event_bus.publish_sync("job_started", job_data)
 
                 # Launch async pipeline worker
                 worker = PipelineWorker(
-                    topic=topic,
-                    preset_name=preset,
+                    topic=item_topic,
+                    preset_name=preset_slug,
                     settings_data=settings_data,
                     custom_output_dir=custom_output_dir,
                     generate_prompts=generate_prompts,

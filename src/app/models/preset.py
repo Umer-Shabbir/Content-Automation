@@ -37,7 +37,30 @@ class ContentPreset(BaseModel):
     description: str = "Money Chuck house style: White-background stick-figure doodle explainers about worst business decisions, scams, and corporate collapses."
     is_builtin: bool = True
     output_dir: str = ""
-    voice_name: str = Field(default="en_us_male_dry_narrator", description="Target TTS voice identifier written to project.json")
+    voice_name: str = Field(default="Adam   ·  American Male", description="Target TTS voice identifier written to project.json")
+    video_language: str = Field(default="English", description="Target language of the video")
+    niche_topics: List[str] = Field(default_factory=lambda: [
+        "The Collapse of WeWork",
+        "The Theranos Blood Testing Scam",
+        "Enron and the Accounting Fraud That Shook Wall Street",
+        "Why Kodak Missed the Digital Camera Revolution",
+        "Blockbuster vs Netflix: The Fatal Mistake",
+        "The New Coke Marketing Disaster",
+        "Fyre Festival: The Ultimate Luxury Fraud",
+        "Juicero: The $400 Squeezed Juice Scandal",
+        "Lehman Brothers and the 2008 Financial Crash",
+        "Nokia's Failure to Adapt to the Smartphone Era",
+        "MoviePass and the Impossible Subscription Model",
+        "Quibi: How to Lose $1.7 Billion in 6 Months",
+        "The Bankruptcy of Sears and Department Store Decline",
+        "Peloton's Post-Pandemic Collapse",
+        "Pets.com and the Dot-Com Bubble Burst",
+        "The Volkswagen Clean Diesel Emissions Scandal",
+        "Xerox PARC: How They Gave Away the Personal Computer",
+        "Atari and the Great Video Game Crash of 1983",
+        "Silicon Valley Bank Run Explained",
+        "The FTX Crypto Collapse and Sam Bankman-Fried"
+    ])
     title_rules: TitleRules = Field(default_factory=lambda: TitleRules(
         title_structure="Top 10 Times ONE [singular trigger] [DESTROYED/KILLED/SAVED] a [beloved entity] Explained Like You're 5",
         hook_style="Singular-agent schadenfreude: ONE decision, ONE ad, ONE mistake, ONE CEO. Caps-lock trigger verb.",
@@ -69,6 +92,15 @@ class ContentPreset(BaseModel):
         require_continuity=True
     ))
 
+    def get_topic(self, index: int = 0) -> str:
+        """
+        Returns a topic from the preset's niche topic pool based on index,
+        falling back to a default formatted name.
+        """
+        if self.niche_topics:
+            return self.niche_topics[index % len(self.niche_topics)]
+        return f"{self.name.replace('_', ' ').title()} Story"
+
 # Alias for compatibility with various parts of the codebase
 JobPreset = ContentPreset
 
@@ -81,7 +113,7 @@ def load_builtin_presets() -> dict:
     if registry_path.exists():
         try:
             import json
-            data = json.loads(registry_path.read_text(encoding="utf-8"))
+            data = json.loads(registry_path.read_text(encoding="utf-8-sig"))
             for slug, item in data.items():
                 ca = item.get("content_automation", {})
                 ia = item.get("image_automation", {})
@@ -94,7 +126,9 @@ def load_builtin_presets() -> dict:
                 presets[slug] = ContentPreset(
                     name=slug,
                     description=item.get("description", ""),
-                    voice_name=item.get("voice_name", "en_us_male_dry_narrator"),
+                    voice_name=item.get("voice_name", "Adam   ·  American Male"),
+                    video_language=item.get("video_language", "English"),
+                    niche_topics=item.get("niche_topics", []),
                     is_builtin=True,
                     title_rules=TitleRules(
                         title_structure=ca.get("title_structure", "Clear and intriguing title"),

@@ -27,9 +27,12 @@ class VisualContinuityState(BaseModel):
 class GenerationPackage(BaseModel):
     topic: str
     preset_name: str
-    voice_name: str = "en_us_male_dry_narrator"
+    voice_name: str = "Adam   ·  American Male"
+    video_language: str = "English"
     title: str
     normalized_title: str
+    seo_tags: List[str] = Field(default_factory=list)
+    seo_description: str = ""
     script: str
     prompts: List[ScenePrompt]
     continuity: VisualContinuityState = Field(default_factory=VisualContinuityState)

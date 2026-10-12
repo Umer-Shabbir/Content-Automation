@@ -39,6 +39,22 @@ def test_preset_models():
     assert preset.script_rules.target_duration_minutes == 10
     assert preset.image_rules.aspect_ratio == "16:9"
 
+def test_preset_niche_topics():
+    preset = ContentPreset(
+        name="test_niche",
+        niche_topics=["Topic A", "Topic B", "Topic C"]
+    )
+    assert preset.get_topic(0) == "Topic A"
+    assert preset.get_topic(1) == "Topic B"
+    assert preset.get_topic(2) == "Topic C"
+    # Cycling test
+    assert preset.get_topic(3) == "Topic A"
+
+    # Fallback test
+    empty_preset = ContentPreset(name="tech_news", niche_topics=[])
+    assert empty_preset.get_topic(0) == "Tech News Story"
+
+
 def test_generation_models():
     scene = ScenePrompt(
         scene_number=1,

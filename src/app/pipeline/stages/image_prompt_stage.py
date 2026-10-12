@@ -47,29 +47,36 @@ class ImagePromptStage:
 
         prompt += "\nOutput strictly as a JSON object with keys: 'recurring_characters' (dict mapping name to description), 'recurring_locations' (dict mapping name to description), and 'art_style_anchor' (string)."
 
-        if hasattr(self.ai, "generate"):
-            response = await self.ai.generate(prompt=prompt, role="generator")
-            text = response.text
-        else:
-            response = await self.ai.generate_message(
-                messages=[{"role": "user", "content": prompt}],
-                system="You are an expert visual prompt engineer.",
-            )
-            text = response["text"]
+        for _ in range(3):
+            if hasattr(self.ai, "generate"):
+                response = await self.ai.generate(prompt=prompt, role="generator")
+                text = response.text
+            else:
+                response = await self.ai.generate_message(
+                    messages=[{"role": "user", "content": prompt}],
+                    system="You are an expert visual prompt engineer.\nCRITICAL INSTRUCTION: DO NOT USE ANY TOOLS OR SKILLS (e.g. memory_search).",
+                )
+                text = response["text"]
 
-        try:
-            # strip possible markdown wrapping
-            text = re.sub(r'^```json\s*', '', text.strip())
-            text = re.sub(r'\s*```$', '', text)
-            data = json.loads(text)
+            try:
+                # strip possible markdown wrapping
+                text_clean = re.sub(r'^```json\s*', '', text.strip())
+                text_clean = re.sub(r'\s*```$', '', text_clean)
 
-            return VisualContinuityState(
-                recurring_characters=data.get("recurring_characters", {}),
-                recurring_locations=data.get("recurring_locations", {}),
-                art_style_anchor=data.get("art_style_anchor", "")
-            )
-        except Exception:
-            return VisualContinuityState()
+                if "skill_result" in text_clean or "memory_search" in text_clean or "[Skill result:" in text_clean:
+                    continue
+
+                data = json.loads(text_clean)
+
+                return VisualContinuityState(
+                    recurring_characters=data.get("recurring_characters", {}),
+                    recurring_locations=data.get("recurring_locations", {}),
+                    art_style_anchor=data.get("art_style_anchor", "")
+                )
+            except Exception:
+                pass
+
+        return VisualContinuityState()
 
     async def _generate_scene_prompt(self, scene: dict, continuity: VisualContinuityState, preset: ContentPreset) -> ScenePrompt:
         # Construct prompt asking for ScenePrompt JSON schema
@@ -94,40 +101,47 @@ class ImagePromptStage:
         }}
         """
 
-        if hasattr(self.ai, "generate"):
-            response = await self.ai.generate(prompt=prompt, role="generator")
-            text = response.text
-        else:
-            response = await self.ai.generate_message(
-                messages=[{"role": "user", "content": prompt}],
-                system="You are an expert cinematic image prompt creator.",
-            )
-            text = response["text"]
+        for _ in range(3):
+            if hasattr(self.ai, "generate"):
+                response = await self.ai.generate(prompt=prompt, role="generator")
+                text = response.text
+            else:
+                response = await self.ai.generate_message(
+                    messages=[{"role": "user", "content": prompt}],
+                    system="You are an expert cinematic image prompt creator.\nCRITICAL INSTRUCTION: DO NOT USE ANY TOOLS OR SKILLS (e.g. memory_search).",
+                )
+                text = response["text"]
 
-        try:
-             text = re.sub(r'^```json\s*', '', text.strip())
-             text = re.sub(r'\s*```$', '', text)
-             data = json.loads(text)
+            try:
+                 text_clean = re.sub(r'^```json\s*', '', text.strip())
+                 text_clean = re.sub(r'\s*```$', '', text_clean)
 
-             return ScenePrompt(
-                 scene_number=scene.get("scene_number", 1),
-                 narration_segment=scene.get("narration_segment", ""),
-                 start_time=scene.get("start_time", ""),
-                 end_time=scene.get("end_time", ""),
-                 visual_description=data.get("visual_description", scene.get("visual_description", "")),
-                 characters_present=data.get("characters_present", []),
-                 location=data.get("location", ""),
-                 mood_lighting=data.get("mood_lighting", ""),
-                 camera_angle=data.get("camera_angle", ""),
-                 detailed_image_prompt=data.get("detailed_image_prompt", "")
-             )
-        except Exception:
-             # Fallback
-             return ScenePrompt(
-                 scene_number=scene.get("scene_number", 1),
-                 narration_segment=scene.get("narration_segment", ""),
-                 start_time=scene.get("start_time", ""),
-                 end_time=scene.get("end_time", ""),
-                 visual_description=scene.get("visual_description", ""),
-                 detailed_image_prompt=f"{scene.get('visual_description', '')}, {continuity.art_style_anchor}"
-             )
+                 if "skill_result" in text_clean or "memory_search" in text_clean or "[Skill result:" in text_clean:
+                     continue
+
+                 data = json.loads(text_clean)
+
+                 return ScenePrompt(
+                     scene_number=scene.get("scene_number", 1),
+                     narration_segment=scene.get("narration_segment", ""),
+                     start_time=scene.get("start_time", ""),
+                     end_time=scene.get("end_time", ""),
+                     visual_description=data.get("visual_description", scene.get("visual_description", "")),
+                     characters_present=data.get("characters_present", []),
+                     location=data.get("location", ""),
+                     mood_lighting=data.get("mood_lighting", ""),
+                     camera_angle=data.get("camera_angle", ""),
+                     detailed_image_prompt=data.get("detailed_image_prompt", "")
+                 )
+            except Exception:
+                 pass
+
+        # Fallback
+        return ScenePrompt(
+            scene_number=scene.get("scene_number", 1),
+            narration_segment=scene.get("narration_segment", ""),
+            start_time=scene.get("start_time", ""),
+            end_time=scene.get("end_time", ""),
+            visual_description=scene.get("visual_description", ""),
+            detailed_image_prompt=f"{scene.get('visual_description', '')}, {continuity.art_style_anchor}"
+        )

@@ -159,3 +159,12 @@ def test_exporter_instance_method(temp_output_dir, sample_package):
     p = Path(export_path)
     assert p.exists()
     assert p.is_dir()
+
+def test_validate_script_text_strips_json_metadata():
+    json_metadata = '{"review": {"hook": "poor"}, "decision": "REVISE"}'
+    cleaned = ContentExporter._validate_script_text(json_metadata)
+    assert cleaned == ""
+
+    json_with_script = '{"review": {"hook": "poor"}, "decision": "REVISE", "refined_script": "This is the real script text."}'
+    cleaned_with_script = ContentExporter._validate_script_text(json_with_script)
+    assert cleaned_with_script == "This is the real script text."

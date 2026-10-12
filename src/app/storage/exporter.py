@@ -7,6 +7,7 @@ from pathlib import Path
 from app.models.generation import GenerationPackage
 from app.models.preset import ContentPreset
 from app.storage.sanitizer import sanitize_filename, sanitize_path
+from app.prompts.parser import extract_script_text
 
 from datetime import datetime, timezone
 
@@ -23,10 +24,18 @@ class ContentExporter:
     def _validate_script_text(script: str) -> str:
         """
         Ensures the script is clean voice-over narration only.
-        Strips potential leading/trailing whitespace or accidental system headers.
+        Strips potential leading/trailing whitespace or accidental system headers/JSON metadata.
         """
-        cleaned = script.strip()
-        return cleaned
+        if not script:
+            return ""
+        cleaned = extract_script_text(script, fallback="")
+        if not cleaned or cleaned.strip().startswith("{"):
+            # Never return raw JSON metadata strings as a script
+            if not script.strip().startswith("{"):
+                return script.strip()
+            return ""
+        return cleaned.strip()
+
 
     @staticmethod
     def _format_prompts(package: GenerationPackage) -> str:
@@ -147,13 +156,36 @@ class ContentExporter:
 
         # 4. Write project.json (formerly metadata.json)
         if include_metadata:
+            target_voice_id = getattr(package, 'voice_name', None)
+            if not target_voice_id and preset and hasattr(preset, 'voice_name'):
+                target_voice_id = preset.voice_name
+            if not target_voice_id:
+                target_voice_id = "Adam   ·  American Male"
+
+            target_language = getattr(package, 'video_language', None)
+            if not target_language and preset and hasattr(preset, 'video_language'):
+                target_language = preset.video_language
+            if not target_language:
+                target_language = "English"
+
+            cleaned_seo_desc = package.seo_description or ""
+            for artifact_kw in ["empty_response", "skill_result", "memory_search", "successtrue", "totaltokens", "[skill result"]:
+                if artifact_kw in cleaned_seo_desc.lower():
+                    cleaned_seo_desc = f"An in-depth video story and explanation covering {package.topic}."
+                    break
+
             meta_dict = {
                 "stage": "SCRIPT_READY",
                 "status": "PENDING",
                 "topic": package.topic,
                 "preset_name": preset.name if preset and preset.name else package.preset_name,
-                "voice_name": preset.voice_name if preset and hasattr(preset, 'voice_name') and preset.voice_name else getattr(package, 'voice_name', 'en_us_male_dry_narrator'),
+                "voice_name": target_voice_id,
+                "voice_id": target_voice_id,
+                "voice": target_voice_id,
+                "video_language": target_language,
                 "title": package.title,
+                "seo_tags": getattr(package, 'seo_tags', []),
+                "seo_description": cleaned_seo_desc,
                 "normalized_title": package.normalized_title,
                 "total_words": package.total_words,
                 "estimated_duration_sec": float(package.estimated_duration_sec) if package.estimated_duration_sec else 0.0,

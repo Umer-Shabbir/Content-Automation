@@ -54,17 +54,17 @@ class PromptBuilder:
 
     @staticmethod
     def build_script_generation_messages(
-        topic: str, title: str, rules: ScriptRules, feedback: str = None, previous_draft: str = None
+        topic: str, title: str, rules: ScriptRules, feedback: str = None, previous_draft: str = None, language: str = "English"
     ) -> Dict[str, Any]:
         rules_text = (
             f"Narrative Structure: {rules.narrative_structure}\n"
             f"Tone: {rules.tone}\n"
             f"Pacing: {rules.pacing}\n"
             f"Target Word Count: {rules.target_words}\n"
-            f"Strict Voiceover Only: {'YES! NO STAGE DIRECTIONS ALLOWED. SPEAKER TAGS (e.g. [Narrator]) ARE REQUIRED.' if rules.strict_voiceover_only else 'Normal Voiceover'}"
+            f"Strict Voiceover Only: {'YES! NO STAGE DIRECTIONS ALLOWED. SPEAKER TAGS (e.g. [Narrator]) ARE FORBIDDEN.' if rules.strict_voiceover_only else 'Normal Voiceover'}"
         )
         user_content = templates.SCRIPT_GENERATION_USER.format(
-            topic=topic, title=title, rules=rules_text
+            topic=topic, title=title, language=language, rules=rules_text
         )
 
         messages = [{"role": "user", "content": user_content.strip()}]

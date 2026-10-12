@@ -141,16 +141,16 @@ def test_main_window_wiring(qapp):
     assert window.presets_view is not None
     assert window.settings_view is not None
 
-    # Verify the stack widget has 6 tabs
-    assert window.stack.count() == 6
+    # Verify the stack widget has 7 tabs
+    assert window.stack.count() == 7
     assert window.presets_view is not None
     assert window.settings_view is not None
 
-    # Check that StackedWidget has 6 tabs
-    assert window.stack.count() == 6
-    assert window.stack.widget(3) == window.presets_view
-    assert window.stack.widget(4) == window.settings_view
-    assert window.stack.widget(5) == window.logs_view
+    # Check that StackedWidget has 7 tabs
+    assert window.stack.count() == 7
+    assert window.stack.widget(4) == window.presets_view
+    assert window.stack.widget(5) == window.settings_view
+    assert window.stack.widget(6) == window.logs_view
 
     # Simulate generation
     window.generate_view.topic_input.setText("Quantum Computing")

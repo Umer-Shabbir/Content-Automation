@@ -78,7 +78,9 @@ class FolderPromptWorker(QThread):
                 except Exception:
                     pass
 
-            preset = BUILTIN_PRESETS.get(preset_name, ContentPreset(name=preset_name))
+            import copy
+            base_preset = BUILTIN_PRESETS.get(preset_name, ContentPreset(name=preset_name))
+            preset = copy.deepcopy(base_preset)
 
             # 1. Setup AI Client
             max_concurrent = self.settings_data.get("max_concurrent_requests", 3)
