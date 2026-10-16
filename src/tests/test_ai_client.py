@@ -169,3 +169,60 @@ async def test_anthropic_client_non_retryable_error(api_profile):
         assert mock_post.call_count == 1
 
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_anthropic_client_concurrency_limiting():
+    """Verify that multiple AnthropicClient instances share the rate limiter and limit concurrent API calls."""
+    import threading
+    from app.ai.rate_limiter import reset_global_rate_limiter
+
+    reset_global_rate_limiter()
+
+    profile = APIProfile(
+        name="concurrency-test",
+        base_url="https://api.anthropic.com",
+        api_key="sk-test",
+        model="claude-3-haiku-20240307",
+        config=RequestConfig(max_concurrent_requests=2, delay_between_requests=0.0)
+    )
+
+    active_calls = 0
+    max_simultaneous_calls = 0
+    call_lock = threading.Lock()
+
+    async def mock_post(*args, **kwargs):
+        nonlocal active_calls, max_simultaneous_calls
+        with call_lock:
+            active_calls += 1
+            max_simultaneous_calls = max(max_simultaneous_calls, active_calls)
+
+        await asyncio.sleep(0.05)
+
+        with call_lock:
+            active_calls -= 1
+
+        mock_resp = MagicMock(spec=httpx.Response)
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {
+            "id": "msg_concurrent",
+            "content": [{"type": "text", "text": "done"}],
+            "usage": {"input_tokens": 1, "output_tokens": 1}
+        }
+        return mock_resp
+
+    with patch('httpx.AsyncClient.post', side_effect=mock_post):
+        async def make_call():
+            # Each call creates its own AnthropicClient just like separate worker threads do
+            c = AnthropicClient(profile=profile)
+            res = await c.generate_message(messages=[{"role": "user", "content": "hi"}])
+            assert res["text"] == "done"
+            await c.close()
+
+        # Fire 6 concurrent calls
+        await asyncio.gather(*[make_call() for _ in range(6)])
+
+    assert max_simultaneous_calls == 2, f"Expected max 2 simultaneous calls, got {max_simultaneous_calls}"
+    reset_global_rate_limiter()
+

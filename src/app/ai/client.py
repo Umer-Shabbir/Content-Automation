@@ -2,7 +2,7 @@ import httpx
 from typing import List, Dict, Any, Optional
 from app.models.api_profile import APIProfile, RequestConfig
 from app.ai.retry import RetryPolicy, retry_with_backoff
-from app.ai.rate_limiter import RateLimiter
+from app.ai.rate_limiter import RateLimiter, get_global_rate_limiter
 from app.ai.usage import TokenUsage, global_usage_tracker, UsageTracker
 from app.utils.logging import get_logger
 
@@ -12,7 +12,12 @@ logger = get_logger(__name__)
 class AnthropicClient:
     """Client for Anthropic-compatible Messages API."""
 
-    def __init__(self, profile: Optional[APIProfile] = None, usage_tracker: Optional[UsageTracker] = None):
+    def __init__(
+        self,
+        profile: Optional[APIProfile] = None,
+        usage_tracker: Optional[UsageTracker] = None,
+        rate_limiter: Optional[RateLimiter] = None,
+    ):
         if profile is None:
             # Default fallback profile
             profile = APIProfile(
@@ -37,10 +42,13 @@ class AnthropicClient:
             base_backoff=profile.config.retry_backoff
         )
 
-        self.rate_limiter = RateLimiter(
-            max_concurrent_requests=profile.config.max_concurrent_requests,
-            delay_between_requests=profile.config.delay_between_requests
-        )
+        if rate_limiter is not None:
+            self.rate_limiter = rate_limiter
+        else:
+            self.rate_limiter = get_global_rate_limiter(
+                max_concurrent_requests=profile.config.max_concurrent_requests,
+                delay_between_requests=profile.config.delay_between_requests
+            )
 
     def _get_headers(self) -> Dict[str, str]:
         return {
@@ -158,5 +166,8 @@ class AnthropicClient:
         return f"<AnthropicClient base_url={self.base_url!r} model={self.model!r}>"
 
 
-def get_ai_client(profile: Optional[APIProfile] = None) -> AnthropicClient:
-    return AnthropicClient(profile)
+def get_ai_client(
+    profile: Optional[APIProfile] = None,
+    rate_limiter: Optional[RateLimiter] = None
+) -> AnthropicClient:
+    return AnthropicClient(profile=profile, rate_limiter=rate_limiter)

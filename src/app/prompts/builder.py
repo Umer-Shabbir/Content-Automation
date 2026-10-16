@@ -193,6 +193,26 @@ class PromptBuilder:
             [{"role": "user", "content": user_content.strip()}]
         )
 
+    @staticmethod
+    def build_thumbnail_prompts_messages(
+        topic: str, title: str, preset: ContentPreset, art_style_anchor: str = ""
+    ) -> Dict[str, Any]:
+        styles_desc_lines = []
+        for i, s in enumerate(preset.thumbnail_styles, 1):
+            styles_desc_lines.append(f"Style {i} ({s.id}): {s.name}\nGuidelines: {s.description}\n")
+        styles_description = "\n".join(styles_desc_lines)
+
+        user_content = templates.THUMBNAIL_PROMPTS_GENERATION_USER.format(
+            title=title,
+            topic=topic,
+            art_style_anchor=art_style_anchor or preset.image_rules.visual_style,
+            styles_description=styles_description
+        )
+        return PromptBuilder._create_payload(
+            templates.THUMBNAIL_PROMPTS_GENERATION_SYSTEM,
+            [{"role": "user", "content": user_content.strip()}]
+        )
+
     def build(self, level, preset, inputs: dict) -> str:
         """
         Generic compatibility dispatcher for building single string prompts.

@@ -1,5 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
+
+class ThumbnailStyle(BaseModel):
+    id: str
+    name: str
+    description: str
 
 class TitleRules(BaseModel):
     title_structure: str = "Clear and intriguing title"
@@ -10,9 +15,9 @@ class TitleRules(BaseModel):
     topic_relevance: str = "Must strongly reflect the core topic without inventing a new subject"
 
 class ScriptRules(BaseModel):
-    narrative_structure: str = "Hook -> Setup -> Rising Action -> Climax -> Resolution"
-    tone: str = "Atmospheric, dramatic, engaging"
-    pacing: str = "Steady, building anticipation"
+    narrative_structure: str = "The Retention Curve Arc: In Medias Res Hook (0-30s) -> Zeigarnik Open Loop -> Rising Stakes Setup -> Escalating Conflict & Deep Dive with Pattern Interrupts every 30-45s -> Climax -> Philosophical Resolution"
+    tone: str = "Atmospheric, dramatic, engaging, high-retention storytelling"
+    pacing: str = "Punchy, rhythmic, 160-180 wpm, continuous momentum with dopamine micro-payoffs, zero fluff"
     target_duration_minutes: int = Field(default=10, ge=1, le=60)
     target_words: int = Field(default=1300, ge=100, le=10000)
     strict_voiceover_only: bool = Field(default=True, description="Enforce zero metadata or stage directions other than speaker tags")
@@ -39,6 +44,23 @@ class ContentPreset(BaseModel):
     output_dir: str = ""
     voice_name: str = Field(default="Adam   ·  American Male", description="Target TTS voice identifier written to project.json")
     video_language: str = Field(default="English", description="Target language of the video")
+    thumbnail_styles: List[ThumbnailStyle] = Field(default_factory=lambda: [
+        ThumbnailStyle(
+            id="stupidity_diagram",
+            name="The Stupidity Diagram",
+            description="Pure white background stick-figure CEO smugly holding a burning bag of money or absurd failed product, thick black marker linework, red marker 'FAIL' badge. High humor, visually striking, no text."
+        ),
+        ThumbnailStyle(
+            id="cliff_collapse",
+            name="The $40B Cliff Collapse",
+            description="Stick figure staring in shock down a catastrophic red marker line chart plunging off a cliff through the floor, clean doodle humor on pure white void. High drama, no text."
+        ),
+        ThumbnailStyle(
+            id="monopoly_emperor",
+            name="Monopoly Emperor",
+            description="Stick-figure billionaire caricature perched atop a precariously wobbling mountain of burning cash, tiny stick-figure victims fleeing, pure white void. High contrast, no text."
+        )
+    ])
     niche_topics: List[str] = Field(default_factory=lambda: [
         "The Collapse of WeWork",
         "The Theranos Blood Testing Scam",
@@ -123,28 +145,38 @@ def load_builtin_presets() -> dict:
                 if isinstance(forbidden, str):
                     forbidden = [f.strip() for f in forbidden.split(",")]
                     
-                presets[slug] = ContentPreset(
-                    name=slug,
-                    description=item.get("description", ""),
-                    voice_name=item.get("voice_name", "Adam   ·  American Male"),
-                    video_language=item.get("video_language", "English"),
-                    niche_topics=item.get("niche_topics", []),
-                    is_builtin=True,
-                    title_rules=TitleRules(
+                raw_styles = item.get("thumbnail_styles", [])
+                thumb_styles = []
+                for s in raw_styles:
+                    if isinstance(s, dict):
+                        thumb_styles.append(ThumbnailStyle(
+                            id=s.get("id", "style"),
+                            name=s.get("name", "Thumbnail Style"),
+                            description=s.get("description", "")
+                        ))
+
+                preset_kwargs = {
+                    "name": slug,
+                    "description": item.get("description", ""),
+                    "voice_name": item.get("voice_name", "Adam   ·  American Male"),
+                    "video_language": item.get("video_language", "English"),
+                    "niche_topics": item.get("niche_topics", []),
+                    "is_builtin": True,
+                    "title_rules": TitleRules(
                         title_structure=ca.get("title_structure", "Clear and intriguing title"),
                         hook_style=ca.get("hook_style", "High curiosity and tension"),
                         forbidden_patterns=forbidden,
                         curiosity_level=9
                     ),
-                    script_rules=ScriptRules(
-                        narrative_structure=ca.get("narrative_structure", "Hook -> Setup -> Resolution"),
-                        tone=ca.get("tone", "Atmospheric, dramatic"),
-                        pacing=ca.get("pacing", "Steady, building anticipation"),
+                    "script_rules": ScriptRules(
+                        narrative_structure=ca.get("narrative_structure", "The Retention Curve Arc: In Medias Res Hook (0-30s) -> Zeigarnik Open Loop -> Rising Stakes Setup -> Escalating Conflict & Deep Dive with Pattern Interrupts every 30-45s -> Climax -> Philosophical Resolution"),
+                        tone=ca.get("tone", "Atmospheric, dramatic, engaging, high-retention storytelling"),
+                        pacing=ca.get("pacing", "Punchy, rhythmic, 160-180 wpm, continuous momentum with dopamine micro-payoffs, zero fluff"),
                         target_duration_minutes=ca.get("target_duration_minutes", 10),
                         target_words=ca.get("target_words", 1800),
                         strict_voiceover_only=True
                     ),
-                    image_rules=ImageRules(
+                    "image_rules": ImageRules(
                         visual_style=ia.get("visual_style", "Cinematic"),
                         cinematic_style=ia.get("cinematic_style", "Cinematic layout"),
                         aspect_ratio=ia.get("aspect_ratio", "16:9"),
@@ -152,8 +184,12 @@ def load_builtin_presets() -> dict:
                         character_consistency=ia.get("character_consistency", ""),
                         environment_consistency=ia.get("environment_consistency", "")
                     ),
-                    reviewer_rules=ReviewerRules(min_quality_score=8.5, max_revisions=3)
-                )
+                    "reviewer_rules": ReviewerRules(min_quality_score=8.5, max_revisions=3)
+                }
+                if thumb_styles:
+                    preset_kwargs["thumbnail_styles"] = thumb_styles
+
+                presets[slug] = ContentPreset(**preset_kwargs)
         except Exception as e:
             print(f"Error loading presets: {e}")
     if "money_chuck" not in presets:

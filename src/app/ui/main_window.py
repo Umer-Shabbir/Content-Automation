@@ -165,6 +165,8 @@ class MainWindow(QMainWindow):
 
         self.jobs_cache = []
         self._active_workers = []
+        self._worker_queue = []       # list of (job_id, worker)
+        self._running_workers = {}    # dict of job_id -> worker
 
         self._setup_ui()
         self._wire_signals()
@@ -292,6 +294,10 @@ class MainWindow(QMainWindow):
         self.bridge.job_completed.connect(self._on_job_completed)
         self.bridge.job_failed.connect(self._on_job_failed)
 
+        # Settings concurrency updates
+        self.settings_view.max_concurrent_spin.valueChanged.connect(self._on_max_concurrent_changed)
+        self.settings_view.btn_save.clicked.connect(self._on_settings_saved)
+
     def _get_current_settings(self) -> dict:
         """Extracts settings configured in SettingsView."""
         return {
@@ -301,6 +307,56 @@ class MainWindow(QMainWindow):
             "output_dir": self.settings_view.out_dir_edit.text().strip() or "output",
             "max_concurrent_requests": self.settings_view.max_concurrent_spin.value()
         }
+
+    def _enqueue_worker(self, job_id: str, worker: QThread, job_data: dict):
+        """Enqueue or immediately launch worker based on max_concurrent setting."""
+        self.jobs_cache.insert(0, job_data)
+        self._active_workers.append(worker)
+
+        settings_data = self._get_current_settings()
+        max_concurrent = settings_data.get("max_concurrent_requests", 3)
+
+        if len(self._running_workers) < max_concurrent:
+            job_data["status"] = "RUNNING"
+            self._running_workers[job_id] = worker
+            self.event_bus.publish_sync("job_started", job_data)
+            worker.start()
+        else:
+            job_data["status"] = "QUEUED"
+            job_data["output"] = f"Queued (waiting for slot, max concurrent: {max_concurrent})..."
+            self._worker_queue.append((job_id, worker))
+            self.event_bus.publish_sync("job_updated", job_data)
+
+    def _process_worker_queue(self):
+        """Start pending workers from queue if active worker count is below max_concurrent."""
+        settings_data = self._get_current_settings()
+        max_concurrent = settings_data.get("max_concurrent_requests", 3)
+
+        while len(self._running_workers) < max_concurrent and self._worker_queue:
+            job_id, worker = self._worker_queue.pop(0)
+            self._running_workers[job_id] = worker
+
+            # Find job in jobs_cache
+            for j in self.jobs_cache:
+                if j.get("id") == job_id:
+                    j["status"] = "RUNNING"
+                    j["output"] = f"Starting execution (active workers: {len(self._running_workers)}/{max_concurrent})..."
+                    self.event_bus.publish_sync("job_started", j)
+                    break
+
+            worker.start()
+
+    def _on_max_concurrent_changed(self, value: int):
+        from app.ai.rate_limiter import get_global_rate_limiter
+        get_global_rate_limiter(max_concurrent_requests=value)
+        self._process_worker_queue()
+
+    def _on_settings_saved(self):
+        settings_data = self._get_current_settings()
+        max_concurrent = settings_data.get("max_concurrent_requests", 3)
+        from app.ai.rate_limiter import get_global_rate_limiter
+        get_global_rate_limiter(max_concurrent_requests=max_concurrent)
+        self._process_worker_queue()
 
     def _handle_generate_prompts_for_folders(self, folder_paths: list):
         """Handle execution of Round 2: Generating Image Prompts for existing Project Folders"""
@@ -318,10 +374,8 @@ class MainWindow(QMainWindow):
                 "created_at": now_str,
                 "output": f"Executing Round 2 Image Prompts Generation for folder '{folder_name}'..."
             }
-            self.jobs_cache.insert(0, job_data)
-            self.event_bus.publish_sync("job_started", job_data)
 
-            # Launch async folder prompt worker
+            # Setup async folder prompt worker
             worker = FolderPromptWorker(
                 folder_path=folder_path,
                 settings_data=settings_data,
@@ -329,8 +383,7 @@ class MainWindow(QMainWindow):
             )
             worker.finished_signal.connect(lambda folder, res, j_id=job_id: self._on_worker_finished(j_id, res))
             worker.failed_signal.connect(lambda folder, err, j_id=job_id: self._on_worker_failed(j_id, folder, err))
-            self._active_workers.append(worker)
-            worker.start()
+            self._enqueue_worker(job_id, worker, job_data)
 
         self._refresh_dashboard()
 
@@ -364,10 +417,8 @@ class MainWindow(QMainWindow):
                     "created_at": now_str,
                     "output": f"Executing generation pipeline for '{item_topic}' under '{preset_slug}'..."
                 }
-                self.jobs_cache.insert(0, job_data)
-                self.event_bus.publish_sync("job_started", job_data)
 
-                # Launch async pipeline worker
+                # Setup async pipeline worker
                 worker = PipelineWorker(
                     topic=item_topic,
                     preset_name=preset_slug,
@@ -378,13 +429,13 @@ class MainWindow(QMainWindow):
                 )
                 worker.finished_signal.connect(lambda res, j_id=job_id: self._on_worker_finished(j_id, res))
                 worker.failed_signal.connect(lambda t, err, j_id=job_id: self._on_worker_failed(j_id, t, err))
-                self._active_workers.append(worker)
-                worker.start()
+                self._enqueue_worker(job_id, worker, job_data)
 
         self._refresh_dashboard()
 
 
     def _on_worker_finished(self, job_id: str, result_payload: dict):
+        self._running_workers.pop(job_id, None)
         output_text = f"Title: {result_payload.get('title')}\n\nScript:\n{result_payload.get('script')}\n\nExported to folder:\n{result_payload.get('output_path')}"
         job_data = {
             "id": job_id,
@@ -392,14 +443,17 @@ class MainWindow(QMainWindow):
             "output": output_text
         }
         self.event_bus.publish_sync("job_completed", job_data)
+        self._process_worker_queue()
 
     def _on_worker_failed(self, job_id: str, topic: str, error_msg: str):
+        self._running_workers.pop(job_id, None)
         job_data = {
             "id": job_id,
             "status": "FAILED",
             "output": f"Error during generation: {error_msg}"
         }
         self.event_bus.publish_sync("job_failed", job_data)
+        self._process_worker_queue()
 
     def _refresh_dashboard(self):
         """Update metrics and jobs table on the dashboard."""

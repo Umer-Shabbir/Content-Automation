@@ -144,3 +144,46 @@ def test_builder_final_review():
     assert "Hello world" in content
     # Check if preset serialized
     assert "Test Preset" in content
+
+def test_sanitize_voiceover_script():
+    from app.pipeline.stages.script_stage import sanitize_voiceover_script
+    raw = (
+        "[Music: Dramatic swelling]\n"
+        "[Narrator]: In the heart of Wall Street, the bank was dying.\n"
+        "(pause)\n"
+        "No one could have predicted the collapse.\n"
+        "[Sound effect: Sirens fading]"
+    )
+    cleaned = sanitize_voiceover_script(raw)
+    assert "[Music" not in cleaned
+    assert "[Narrator]" not in cleaned
+    assert "(pause)" not in cleaned
+    assert "[Sound effect" not in cleaned
+    assert "In the heart of Wall Street" in cleaned
+    assert "No one could have predicted the collapse." in cleaned
+
+@pytest.mark.asyncio
+async def test_script_stage_critic_feedback_loop():
+    from unittest.mock import AsyncMock
+    from app.pipeline.stages.script_stage import ScriptStage
+
+    mock_ai = AsyncMock()
+    # Attempt 0: generator returns draft with stage directions
+    # Attempt 0: critic returns REVISE with feedback
+    # Attempt 1: generator returns polished draft based on feedback
+    # Attempt 1: critic returns APPROVE
+    gen_call_1 = AsyncMock(text="[Narrator]: Bad throat-clearing intro. Today we explore finance. [Music]")
+    critic_call_1 = AsyncMock(text='{"decision": "REVISE", "score": 65, "feedback": "Remove stage directions and use In Medias Res hook."}')
+    gen_call_2 = AsyncMock(text="In the high-stakes world of finance, one phone call triggered the greatest market crash in human history.")
+    critic_call_2 = AsyncMock(text='{"decision": "APPROVE", "score": 95, "feedback": "Outstanding retention hook."}')
+
+    mock_ai.generate.side_effect = [gen_call_1, critic_call_1, gen_call_2, critic_call_2]
+
+    stage = ScriptStage(ai_client=mock_ai)
+    preset = ContentPreset(name="money_chuck")
+
+    result = await stage.process("Market Crash", "The Day Wall Street Died", preset, retry_limit=3)
+    assert "one phone call triggered" in result
+    assert "[Narrator]" not in result
+    assert "[Music]" not in result
+    assert mock_ai.generate.call_count == 4

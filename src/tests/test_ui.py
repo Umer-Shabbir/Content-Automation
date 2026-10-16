@@ -270,3 +270,44 @@ def test_ui_feedback_on_presets_button(qapp):
     view.btn_save.click()
     assert view.status_label.text() == "Preset Saved."
 
+
+def test_main_window_worker_concurrency_queue(qapp):
+    from PySide6.QtCore import QThread
+    from unittest.mock import MagicMock
+
+    event_bus = EventBus()
+    window = MainWindow(event_bus=event_bus)
+    window.settings_view.max_concurrent_spin.setValue(2)
+
+    class DummyWorker(QThread):
+        def run(self):
+            pass
+
+    workers = [DummyWorker() for _ in range(5)]
+    for w in workers:
+        w.start = MagicMock()
+
+    for idx, w in enumerate(workers):
+        job_id = f"test-job-{idx}"
+        job_data = {"id": job_id, "topic": f"Topic {idx}", "preset": "test", "status": "PENDING"}
+        window._enqueue_worker(job_id, w, job_data)
+
+    # Max concurrent is 2, so exactly 2 should be running and 3 queued
+    assert len(window._running_workers) == 2
+    assert len(window._worker_queue) == 3
+
+    # Check statuses in jobs_cache
+    running_jobs = [j for j in window.jobs_cache if j.get("status") == "RUNNING"]
+    queued_jobs = [j for j in window.jobs_cache if j.get("status") == "QUEUED"]
+    assert len(running_jobs) == 2
+    assert len(queued_jobs) == 3
+
+    # Finish one running job
+    first_running_id = list(window._running_workers.keys())[0]
+    window._on_worker_finished(first_running_id, {"title": "T", "script": "S", "output_path": "P"})
+
+    # Next job in queue should have started automatically: running count stays 2, queue count drops to 2
+    assert len(window._running_workers) == 2
+    assert len(window._worker_queue) == 2
+
+

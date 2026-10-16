@@ -1,7 +1,7 @@
-﻿import os
+import os
 import json
 import re
-from typing import Optional
+from typing import Optional, List, Dict
 from pathlib import Path
 
 from app.models.generation import GenerationPackage
@@ -73,25 +73,75 @@ class ContentExporter:
 
         return "\n".join(lines).strip()
 
-    @staticmethod
-    def _format_thumbnail_prompt(package: GenerationPackage, preset: Optional[ContentPreset] = None) -> str:
+    @classmethod
+    def _get_or_generate_thumbnail_prompts(cls, package: GenerationPackage, preset: Optional[ContentPreset] = None) -> List[Dict[str, str]]:
+        anchor = ""
+        if package.continuity and package.continuity.art_style_anchor:
+            anchor = package.continuity.art_style_anchor
+        elif preset and hasattr(preset, "image_rules") and hasattr(preset.image_rules, "visual_style"):
+            anchor = preset.image_rules.visual_style
+
+        # Get preset thumbnail styles (default to 3 styles)
+        styles = []
+        resolved_preset = preset
+        if resolved_preset is None and getattr(package, "preset_name", None):
+            from app.models.preset import BUILTIN_PRESETS
+            resolved_preset = BUILTIN_PRESETS.get(package.preset_name)
+
+        if resolved_preset and hasattr(resolved_preset, "thumbnail_styles") and resolved_preset.thumbnail_styles:
+            styles = resolved_preset.thumbnail_styles
+        else:
+            from app.models.preset import ContentPreset
+            dummy = ContentPreset()
+            styles = dummy.thumbnail_styles
+
+        results = []
+        existing_prompts = getattr(package, "thumbnail_prompts", []) or []
+
+        for idx, s in enumerate(styles[:3]):
+            s_id = getattr(s, "id", f"style_{idx+1}")
+            s_name = getattr(s, "name", f"Style {idx+1}")
+            s_desc = getattr(s, "description", "")
+
+            if idx < len(existing_prompts) and existing_prompts[idx].strip():
+                prompt_text = existing_prompts[idx].strip()
+            else:
+                p_name = resolved_preset.name if resolved_preset else "cinematic"
+                prompt_text = (
+                    f"A high-CTR YouTube thumbnail in the {p_name} style: {s_name}. "
+                    f"{s_desc} "
+                    f"Visual focus: Compelling, dramatic composition for '{package.title}'. "
+                    f"{f'Art Style Anchor: {anchor}. ' if anchor else ''}"
+                    f"Extreme visual clarity, intense contrast, single dominant focal point, visually arresting. No text in the image."
+                ).strip()
+
+            results.append({
+                "style_id": s_id,
+                "style_name": s_name,
+                "prompt": prompt_text
+            })
+
+        return results
+
+    @classmethod
+    def _format_thumbnail_prompt(cls, package: GenerationPackage, preset: Optional[ContentPreset] = None) -> str:
         """
-        Formats a dedicated thumbnail prompt based on the title, topic, and art style.
+        Formats 3 distinct built-in thumbnail prompts based on the preset styles, title, and topic.
         """
+        prompts_data = cls._get_or_generate_thumbnail_prompts(package, preset)
+        anchor = package.continuity.art_style_anchor if package.continuity and package.continuity.art_style_anchor else (preset.image_rules.visual_style if preset and hasattr(preset, 'image_rules') else '')
+
         lines = []
         lines.append(f"Title: {package.title}")
         lines.append(f"Topic: {package.topic}")
-        if package.continuity and package.continuity.art_style_anchor:
-            lines.append(f"Art Style Anchor: {package.continuity.art_style_anchor}")
-        
-        # Build the actual prompt
-        prompt = f"A compelling, high-contrast YouTube thumbnail for a video titled '{package.title}'. "
-        if package.continuity and package.continuity.art_style_anchor:
-            prompt += f"Style: {package.continuity.art_style_anchor}. "
-        
-        prompt += "The image should have clear focal points, vibrant colors, and be visually striking. No text in the image."
-        
-        lines.append(f"\nThumbnail Prompt: {prompt}\n")
+        if anchor:
+            lines.append(f"Art Style Anchor: {anchor}")
+        lines.append("")
+
+        for i, item in enumerate(prompts_data, 1):
+            lines.append(f"--- Thumbnail Style {i}: {item['style_name']} ---")
+            lines.append(f"Thumbnail Prompt: {item['prompt']}\n")
+
         return "\n".join(lines).strip()
 
     @staticmethod
@@ -174,6 +224,9 @@ class ContentExporter:
                     cleaned_seo_desc = f"An in-depth video story and explanation covering {package.topic}."
                     break
 
+            thumb_data = cls._get_or_generate_thumbnail_prompts(package, preset)
+            package.thumbnail_prompts = [item["prompt"] for item in thumb_data]
+
             meta_dict = {
                 "stage": "SCRIPT_READY",
                 "status": "PENDING",
@@ -187,6 +240,8 @@ class ContentExporter:
                 "seo_tags": getattr(package, 'seo_tags', []),
                 "seo_description": cleaned_seo_desc,
                 "normalized_title": package.normalized_title,
+                "thumbnail_prompts": thumb_data,
+                "thumbnail_prompt": thumb_data[0]["prompt"] if thumb_data else "",
                 "total_words": package.total_words,
                 "estimated_duration_sec": float(package.estimated_duration_sec) if package.estimated_duration_sec else 0.0,
                 "quality_score": float(package.quality_score) if package.quality_score else 0.0,
@@ -198,7 +253,7 @@ class ContentExporter:
         return str(target_dir)
 
     @classmethod
-    def write_prompts_to_existing_project(cls, project_dir: Path, package: GenerationPackage) -> bool:
+    def write_prompts_to_existing_project(cls, project_dir: Path, package: GenerationPackage, preset: Optional[ContentPreset] = None) -> bool:
         """
         Appends or updates prompts.txt and project.json in an existing project folder
         after audio has been transcribed.
@@ -206,19 +261,44 @@ class ContentExporter:
         if not project_dir.exists() or not package.prompts:
             return False
 
-        prompts_content = cls._format_prompts(package)
-        (project_dir / "prompts.txt").write_text(prompts_content, encoding="utf-8")
-
         # Support both metadata.json (legacy) and project.json (new format)
         meta_path = project_dir / "project.json"
         if not meta_path.exists():
             meta_path = project_dir / "metadata.json"
+
+        resolved_preset = preset
+        preset_name_from_meta = ""
+        if meta_path.exists():
+            try:
+                _meta_peek = json.loads(meta_path.read_text(encoding="utf-8"))
+                preset_name_from_meta = _meta_peek.get("preset_name", "")
+            except Exception:
+                pass
+
+        if resolved_preset is None:
+            pname = getattr(package, "preset_name", None) or preset_name_from_meta
+            if pname:
+                from app.models.preset import BUILTIN_PRESETS
+                resolved_preset = BUILTIN_PRESETS.get(pname)
+
+        prompts_content = cls._format_prompts(package)
+        (project_dir / "prompts.txt").write_text(prompts_content, encoding="utf-8")
+
+        # Ensure thumbnail_prompt.txt exists
+        thumb_file = project_dir / "thumbnail_prompt.txt"
+        if not thumb_file.exists():
+            thumb_content = cls._format_thumbnail_prompt(package, preset=resolved_preset)
+            thumb_file.write_text(thumb_content, encoding="utf-8")
 
         if meta_path.exists():
             try:
                 meta_dict = json.loads(meta_path.read_text(encoding="utf-8"))
                 meta_dict["stage"] = "PROMPTS_READY"
                 meta_dict["prompts_generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                if "thumbnail_prompts" not in meta_dict:
+                    thumb_data = cls._get_or_generate_thumbnail_prompts(package, preset=resolved_preset)
+                    meta_dict["thumbnail_prompts"] = thumb_data
+                    meta_dict["thumbnail_prompt"] = thumb_data[0]["prompt"] if thumb_data else ""
                 # When updating, if it was legacy metadata.json, save as project.json instead
                 new_meta_path = project_dir / "project.json"
                 new_meta_path.write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")

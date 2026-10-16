@@ -25,12 +25,24 @@ class ImagePromptStage:
 
         # 2. Generate and Critique Prompts
         prompts = []
-        for scene in scenes:
-            scene_prompt = await self._generate_scene_prompt(scene, continuity, preset)
+        total_scenes = len(scenes)
+        for i, scene in enumerate(scenes):
+            prev_narration = scenes[i - 1].get("narration_segment", "") if i > 0 else "None (Beginning of video)"
+            next_narration = scenes[i + 1].get("narration_segment", "") if i + 1 < total_scenes else "None (End of video)"
+            scene_prompt = await self._generate_scene_prompt(
+                scene=scene,
+                continuity=continuity,
+                preset=preset,
+                topic=topic,
+                scene_index=i + 1,
+                total_scenes=total_scenes,
+                prev_narration=prev_narration,
+                next_narration=next_narration,
+            )
 
-            # Simple critique logic: verify style anchor is in prompt
-            if continuity.art_style_anchor.lower() not in scene_prompt.detailed_image_prompt.lower():
-                 scene_prompt.detailed_image_prompt += f", {continuity.art_style_anchor}"
+            # Critique logic: verify style anchor is in prompt
+            if continuity.art_style_anchor and continuity.art_style_anchor.lower() not in scene_prompt.detailed_image_prompt.lower():
+                scene_prompt.detailed_image_prompt += f", {continuity.art_style_anchor}"
 
             prompts.append(scene_prompt)
 
@@ -59,7 +71,6 @@ class ImagePromptStage:
                 text = response["text"]
 
             try:
-                # strip possible markdown wrapping
                 text_clean = re.sub(r'^```json\s*', '', text.strip())
                 text_clean = re.sub(r'\s*```$', '', text_clean)
 
@@ -78,28 +89,54 @@ class ImagePromptStage:
 
         return VisualContinuityState()
 
-    async def _generate_scene_prompt(self, scene: dict, continuity: VisualContinuityState, preset: ContentPreset) -> ScenePrompt:
-        # Construct prompt asking for ScenePrompt JSON schema
-        prompt = f"""
-        Design an image prompt for a single scene based on this context.
+    async def _generate_scene_prompt(
+        self,
+        scene: dict,
+        continuity: VisualContinuityState,
+        preset: ContentPreset,
+        topic: str = "",
+        scene_index: int = 1,
+        total_scenes: int = 1,
+        prev_narration: str = "",
+        next_narration: str = "",
+    ) -> ScenePrompt:
+        preset_style_desc = getattr(preset, "visual_style", "") or continuity.art_style_anchor
+        narration = scene.get("narration_segment", "")
 
-        Narration: {scene.get('narration_segment')}
-        Timestamps: {scene.get('start_time', '')} to {scene.get('end_time', '')}
-        Visual idea: {scene.get('visual_description')}
-        Style anchor: {continuity.art_style_anchor}
-        Known characters: {json.dumps(continuity.recurring_characters)}
-        Known locations: {json.dumps(continuity.recurring_locations)}
+        prompt = f"""You are an expert cinematic image prompt engineer crafting visual prompts for an automated video generator.
+Produce a stunning, detailed, cinematic image prompt for Scene Beat {scene_index} of {total_scenes}.
 
-        Return ONLY valid JSON matching this schema:
-        {{
-            "visual_description": "String",
-            "characters_present": ["List of strings"],
-            "location": "String",
-            "mood_lighting": "String",
-            "camera_angle": "String",
-            "detailed_image_prompt": "String exactly ready to drop into an image generator"
-        }}
-        """
+Even if the current narration beat is concise, use the surrounding narrative flow and story arc to depict this exact moment vividly and consistently.
+
+Video Topic: {topic or 'Cinematic Video'}
+Art Style Anchor: {continuity.art_style_anchor}
+Preset Visual Guidelines: {preset_style_desc}
+
+Narrative Flow:
+- Preceding Beat: "{prev_narration}"
+- CURRENT BEAT (Beat {scene_index}): "{narration}"
+- Upcoming Beat: "{next_narration}"
+
+Timestamps: {scene.get('start_time', '')} to {scene.get('end_time', '')}
+Visual Idea: {scene.get('visual_description', narration)}
+Known Characters: {json.dumps(continuity.recurring_characters)}
+Known Locations: {json.dumps(continuity.recurring_locations)}
+
+Requirements:
+1. Depict the CURRENT BEAT with concrete visual actions, specific subject matter, environment depth, and composition.
+2. Define a dramatic camera angle (e.g., dynamic close-up, low-angle hero shot, wide panoramic view).
+3. Specify atmospheric mood lighting (e.g., volumetric god rays, deep chiaroscuro, soft diffused ambient light).
+4. The 'detailed_image_prompt' must be complete and ready for an image generation model (Imagen 3, FLUX, Midjourney), ending with the visual style anchor.
+
+Return ONLY valid JSON matching this schema:
+{{
+    "visual_description": "Clear description of the visual scene",
+    "characters_present": ["List of character names present or empty list"],
+    "location": "Setting/environment description",
+    "mood_lighting": "Specific mood and lighting atmosphere",
+    "camera_angle": "Camera framing and perspective",
+    "detailed_image_prompt": "Highly detailed, descriptive image generation prompt ending with the style anchor"
+}}"""
 
         for _ in range(3):
             if hasattr(self.ai, "generate"):
@@ -113,35 +150,36 @@ class ImagePromptStage:
                 text = response["text"]
 
             try:
-                 text_clean = re.sub(r'^```json\s*', '', text.strip())
-                 text_clean = re.sub(r'\s*```$', '', text_clean)
+                text_clean = re.sub(r'^```json\s*', '', text.strip())
+                text_clean = re.sub(r'\s*```$', '', text_clean)
 
-                 if "skill_result" in text_clean or "memory_search" in text_clean or "[Skill result:" in text_clean:
-                     continue
+                if "skill_result" in text_clean or "memory_search" in text_clean or "[Skill result:" in text_clean:
+                    continue
 
-                 data = json.loads(text_clean)
+                data = json.loads(text_clean)
 
-                 return ScenePrompt(
-                     scene_number=scene.get("scene_number", 1),
-                     narration_segment=scene.get("narration_segment", ""),
-                     start_time=scene.get("start_time", ""),
-                     end_time=scene.get("end_time", ""),
-                     visual_description=data.get("visual_description", scene.get("visual_description", "")),
-                     characters_present=data.get("characters_present", []),
-                     location=data.get("location", ""),
-                     mood_lighting=data.get("mood_lighting", ""),
-                     camera_angle=data.get("camera_angle", ""),
-                     detailed_image_prompt=data.get("detailed_image_prompt", "")
-                 )
+                return ScenePrompt(
+                    scene_number=scene.get("scene_number", scene_index),
+                    narration_segment=narration,
+                    start_time=scene.get("start_time", ""),
+                    end_time=scene.get("end_time", ""),
+                    visual_description=data.get("visual_description", scene.get("visual_description", narration)),
+                    characters_present=data.get("characters_present", []),
+                    location=data.get("location", ""),
+                    mood_lighting=data.get("mood_lighting", ""),
+                    camera_angle=data.get("camera_angle", ""),
+                    detailed_image_prompt=data.get("detailed_image_prompt", "")
+                )
             except Exception:
-                 pass
+                pass
 
-        # Fallback
+        # Fallback with enriched detail
+        fallback_prompt = f"Cinematic shot of {scene.get('visual_description', narration)}, {continuity.art_style_anchor or preset_style_desc}"
         return ScenePrompt(
-            scene_number=scene.get("scene_number", 1),
-            narration_segment=scene.get("narration_segment", ""),
+            scene_number=scene.get("scene_number", scene_index),
+            narration_segment=narration,
             start_time=scene.get("start_time", ""),
             end_time=scene.get("end_time", ""),
-            visual_description=scene.get("visual_description", ""),
-            detailed_image_prompt=f"{scene.get('visual_description', '')}, {continuity.art_style_anchor}"
+            visual_description=scene.get("visual_description", narration),
+            detailed_image_prompt=fallback_prompt
         )

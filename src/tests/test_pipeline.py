@@ -26,6 +26,7 @@ def mock_pipeline():
     image_mock = AsyncMock()
     # image_mock process returns (prompts, continuity)
     image_mock.process.return_value = ([], AsyncMock())
+    image_mock.ai = None
 
     review_mock = AsyncMock()
     review_mock.process.side_effect = lambda pkg: pkg

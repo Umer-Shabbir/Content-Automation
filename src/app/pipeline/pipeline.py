@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 import re
 from typing import Optional, List
 
@@ -100,8 +102,94 @@ class GenerationPipeline:
             package.prompts = prompts
             package.continuity = continuity
 
-        # 5. Final Review
+        # 5. Generate 3 distinct thumbnail prompts using the preset's built-in thumbnail styles
+        package.thumbnail_prompts = await self.generate_thumbnail_prompts(package, preset)
+
+        # 6. Final Review
         package = await self.final_review_stage.process(package)
 
         return package
+
+    async def generate_thumbnail_prompts(self, package: GenerationPackage, preset: ContentPreset) -> List[str]:
+        """
+        Generates 3 distinct YouTube thumbnail prompts based on the preset's 3 built-in thumbnail styles.
+        """
+        from app.storage.exporter import ContentExporter
+        from app.prompts.builder import PromptBuilder
+        import json, re
+
+        default_data = ContentExporter._get_or_generate_thumbnail_prompts(package, preset)
+        fallback_prompts = [item["prompt"] for item in default_data]
+
+        ai_client = getattr(self.image_prompt_stage, "ai", None)
+        if not ai_client:
+            return fallback_prompts
+
+        try:
+            anchor = package.continuity.art_style_anchor or getattr(preset.image_rules, "visual_style", "")
+            payload = PromptBuilder.build_thumbnail_prompts_messages(
+                topic=package.topic,
+                title=package.title,
+                preset=preset,
+                art_style_anchor=anchor
+            )
+            prompt_content = payload["messages"][0]["content"]
+            system_prompt = payload.get("system", "")
+
+            if hasattr(ai_client, "generate"):
+                res = ai_client.generate(prompt=prompt_content, role="generator")
+                response = await res if inspect.isawaitable(res) else res
+                if hasattr(response, "text") and isinstance(response.text, str):
+                    raw_text = response.text.strip()
+                elif isinstance(response, str):
+                    raw_text = response.strip()
+                else:
+                    raw_text = ""
+            elif hasattr(ai_client, "generate_message"):
+                res = ai_client.generate_message(
+                    messages=[{"role": "user", "content": prompt_content}],
+                    system=system_prompt
+                )
+                response = await res if inspect.isawaitable(res) else res
+                if isinstance(response, dict) and isinstance(response.get("text"), str):
+                    raw_text = response["text"].strip()
+                elif isinstance(response, str):
+                    raw_text = response.strip()
+                else:
+                    raw_text = ""
+            else:
+                return fallback_prompts
+
+            from app.prompts.parser import extract_json
+            parsed = extract_json(raw_text)
+            if isinstance(parsed, dict):
+                for k in ["thumbnail_prompts", "thumbnails", "prompts", "candidates"]:
+                    if isinstance(parsed.get(k), list):
+                        parsed = parsed[k]
+                        break
+
+            if isinstance(parsed, list) and len(parsed) >= 1:
+                llm_prompts = []
+                for idx, item in enumerate(parsed[:3]):
+                    if isinstance(item, dict):
+                        p_text = item.get("thumbnail_prompt") or item.get("prompt") or item.get("text") or ""
+                    elif isinstance(item, str):
+                        p_text = item
+                    else:
+                        p_text = ""
+
+                    if p_text and p_text.strip():
+                        llm_prompts.append(p_text.strip())
+                    elif idx < len(fallback_prompts):
+                        llm_prompts.append(fallback_prompts[idx])
+
+                while len(llm_prompts) < 3 and len(llm_prompts) < len(fallback_prompts):
+                    llm_prompts.append(fallback_prompts[len(llm_prompts)])
+
+                if len(llm_prompts) == 3:
+                    return llm_prompts
+        except Exception:
+            pass
+
+        return fallback_prompts
 

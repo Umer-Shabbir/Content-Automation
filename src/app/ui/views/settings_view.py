@@ -117,7 +117,13 @@ class SettingsView(QWidget):
                 if "output_dir" in data:
                     self.out_dir_edit.setText(data["output_dir"])
                 if "max_concurrent_requests" in data:
-                    self.max_concurrent_spin.setValue(int(data["max_concurrent_requests"]))
+                    val = int(data["max_concurrent_requests"])
+                    self.max_concurrent_spin.setValue(val)
+                    try:
+                        from app.ai.rate_limiter import get_global_rate_limiter
+                        get_global_rate_limiter(max_concurrent_requests=val)
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"Error loading settings: {e}")
 
@@ -133,6 +139,11 @@ class SettingsView(QWidget):
                 "max_concurrent_requests": self.max_concurrent_spin.value()
             }
             SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            try:
+                from app.ai.rate_limiter import get_global_rate_limiter
+                get_global_rate_limiter(max_concurrent_requests=self.max_concurrent_spin.value())
+            except Exception:
+                pass
             return True
         except Exception as e:
             print(f"Error saving settings: {e}")

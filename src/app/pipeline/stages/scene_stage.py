@@ -64,61 +64,25 @@ class SceneStage:
         script_text = script_or_chunks if isinstance(script_or_chunks, str) else str(script_or_chunks)
         return await self._process_text_breakdown(script_text, preset)
 
-    def _build_scenes_from_srt_chunks(self, srt_chunks: List[SRTChunk], min_chunk_duration: float = 1.5) -> List[dict]:
+    def _build_scenes_from_srt_chunks(self, srt_chunks: List[SRTChunk], min_chunk_duration: float = 0.0) -> List[dict]:
         """
-        Creates fine-grained scene beats targeting the 2-3 second image interval.
-        Every subtitle chunk becomes its own scene, merging tiny sub-second chunks
-        only if their duration is less than min_chunk_duration.
+        Creates fine-grained scene beats with strict 1:1 alignment with every subtitle chunk.
+        Every subtitle chunk becomes its own individual scene beat with matching index.
+        No merging of chunks.
         """
         scenes = []
-        cur_text_parts = []
-        cur_start_str = ""
-        cur_end_str = ""
-        cur_start_sec = 0.0
-        cur_end_sec = 0.0
-
         for chunk in srt_chunks:
-            start_sec = _time_str_to_seconds(chunk.start_time)
-            end_sec = _time_str_to_seconds(chunk.end_time)
             text = chunk.text.strip()
             if not text:
                 continue
 
-            if not cur_text_parts:
-                cur_text_parts = [text]
-                cur_start_str = chunk.start_time
-                cur_end_str = chunk.end_time
-                cur_start_sec = start_sec
-                cur_end_sec = end_sec
-            else:
-                chunk_dur = cur_end_sec - cur_start_sec
-                # If current accumulated duration is less than 1.5s, merge with next
-                if chunk_dur < min_chunk_duration:
-                    cur_text_parts.append(text)
-                    cur_end_str = chunk.end_time
-                    cur_end_sec = end_sec
-                else:
-                    # Finalize current scene beat
-                    scenes.append({
-                        "scene_number": len(scenes) + 1,
-                        "narration_segment": " ".join(cur_text_parts),
-                        "start_time": cur_start_str,
-                        "end_time": cur_end_str,
-                        "visual_description": " ".join(cur_text_parts),
-                    })
-                    cur_text_parts = [text]
-                    cur_start_str = chunk.start_time
-                    cur_end_str = chunk.end_time
-                    cur_start_sec = start_sec
-                    cur_end_sec = end_sec
-
-        if cur_text_parts:
+            scene_idx = len(scenes) + 1
             scenes.append({
-                "scene_number": len(scenes) + 1,
-                "narration_segment": " ".join(cur_text_parts),
-                "start_time": cur_start_str,
-                "end_time": cur_end_str,
-                "visual_description": " ".join(cur_text_parts),
+                "scene_number": scene_idx,
+                "narration_segment": text,
+                "start_time": chunk.start_time,
+                "end_time": chunk.end_time,
+                "visual_description": text,
             })
 
         return scenes

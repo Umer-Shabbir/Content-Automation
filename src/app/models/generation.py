@@ -36,6 +36,7 @@ class GenerationPackage(BaseModel):
     script: str
     prompts: List[ScenePrompt]
     continuity: VisualContinuityState = Field(default_factory=VisualContinuityState)
+    thumbnail_prompts: List[str] = Field(default_factory=list)
     total_words: int = 0
     estimated_duration_sec: float = 0.0
     quality_score: float = 0.0
