@@ -108,11 +108,11 @@ class ContentExporter:
             else:
                 p_name = resolved_preset.name if resolved_preset else "cinematic"
                 prompt_text = (
-                    f"A high-CTR YouTube thumbnail in the {p_name} style: {s_name}. "
-                    f"{s_desc} "
-                    f"Visual focus: Compelling, dramatic composition for '{package.title}'. "
-                    f"{f'Art Style Anchor: {anchor}. ' if anchor else ''}"
-                    f"Extreme visual clarity, intense contrast, single dominant focal point, visually arresting. No text in the image."
+                    f"A high-CTR YouTube thumbnail in the {p_name} style ({s_name}): {s_desc} "
+                    f"Central narrative hook: High-tension dramatic visual staging for '{package.title}' ({package.topic}). "
+                    f"Composition: 3-Element rule with ONE primary dominant focal subject occupying 45-50% of the canvas, "
+                    f"stark figure-ground silhouette isolation, extreme mobile 300ms readability, high dynamic range chiaroscuro contrast. "
+                    f"No text, no typography, no logos in the image. {anchor}"
                 ).strip()
 
             results.append({
@@ -204,12 +204,22 @@ class ContentExporter:
         thumbnail_content = cls._format_thumbnail_prompt(package, preset)
         (target_dir / "thumbnail_prompt.txt").write_text(thumbnail_content, encoding="utf-8")
 
+        # 3.6 Extract chapters from script and write initial chapters.txt
+        from app.prompts.parser import extract_chapters_from_script
+        chapters_data = extract_chapters_from_script(script_content)
+        if chapters_data:
+            initial_chapter_lines = []
+            for idx, ch in enumerate(chapters_data):
+                ts = "00:00" if idx == 0 else "--:--"
+                initial_chapter_lines.append(f"{ts} - {ch['title']}")
+            (target_dir / "chapters.txt").write_text("\n".join(initial_chapter_lines), encoding="utf-8")
+
         # 4. Write project.json (formerly metadata.json)
         if include_metadata:
             target_voice_id = getattr(package, 'voice_name', None)
             if not target_voice_id and preset and hasattr(preset, 'voice_name'):
                 target_voice_id = preset.voice_name
-            if not target_voice_id:
+            if not target_voice_id or "Adam" in str(target_voice_id):
                 target_voice_id = "Adam   ·  American Male"
 
             target_language = getattr(package, 'video_language', None)
@@ -242,13 +252,21 @@ class ContentExporter:
                 "normalized_title": package.normalized_title,
                 "thumbnail_prompts": thumb_data,
                 "thumbnail_prompt": thumb_data[0]["prompt"] if thumb_data else "",
+                "chapters": [{"title": ch["title"], "first_sentence": ch["first_sentence"]} for ch in chapters_data] if chapters_data else [],
                 "total_words": package.total_words,
                 "estimated_duration_sec": float(package.estimated_duration_sec) if package.estimated_duration_sec else 0.0,
                 "quality_score": float(package.quality_score) if package.quality_score else 0.0,
                 "reviewer_notes": package.reviewer_notes,
                 "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             }
-            (target_dir / "project.json").write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
+                        # Append timestamps if chapters are available
+            chapters_file = target_dir / "chapters.txt"
+            if chapters_file.exists():
+                ch_text = chapters_file.read_text(encoding="utf-8").strip()
+                if ch_text and "00:00" in ch_text and "--:--" not in ch_text and "00:00" not in meta_dict.get("seo_description", ""):
+                    meta_dict["seo_description"] = meta_dict["seo_description"].rstrip() + "\n\nTimestamps:\n" + ch_text
+
+            (target_dir / "project.json").write_text(json.dumps(meta_dict, indent=2, ensure_ascii=False), encoding="utf-8")
 
         return str(target_dir)
 
@@ -299,9 +317,22 @@ class ContentExporter:
                     thumb_data = cls._get_or_generate_thumbnail_prompts(package, preset=resolved_preset)
                     meta_dict["thumbnail_prompts"] = thumb_data
                     meta_dict["thumbnail_prompt"] = thumb_data[0]["prompt"] if thumb_data else ""
+                # Check if chapters.txt has timestamps to append to seo_description
+                chapters_file = project_dir / "chapters.txt"
+                if chapters_file.exists():
+                    ch_text = chapters_file.read_text(encoding="utf-8").strip()
+                    cur_desc = meta_dict.get("seo_description", "")
+                    if ch_text and "00:00" in ch_text and "--:--" not in ch_text and "00:00" not in cur_desc:
+                        meta_dict["seo_description"] = cur_desc.rstrip() + "\n\nTimestamps:\n" + ch_text
+
+                if "Adam" in str(meta_dict.get("voice_name", "")):
+                    meta_dict["voice_name"] = "Adam   ·  American Male"
+                    meta_dict["voice_id"] = "Adam   ·  American Male"
+                    meta_dict["voice"] = "Adam   ·  American Male"
+
                 # When updating, if it was legacy metadata.json, save as project.json instead
                 new_meta_path = project_dir / "project.json"
-                new_meta_path.write_text(json.dumps(meta_dict, indent=2), encoding="utf-8")
+                new_meta_path.write_text(json.dumps(meta_dict, indent=2, ensure_ascii=False), encoding="utf-8")
                 # Optionally remove the old metadata.json if it exists and we're converting
                 if meta_path.name == "metadata.json" and new_meta_path.exists():
                     try:

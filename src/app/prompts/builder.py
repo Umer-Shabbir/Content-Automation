@@ -61,7 +61,8 @@ class PromptBuilder:
             f"Tone: {rules.tone}\n"
             f"Pacing: {rules.pacing}\n"
             f"Target Word Count: {rules.target_words}\n"
-            f"Strict Voiceover Only: {'YES! NO STAGE DIRECTIONS ALLOWED. SPEAKER TAGS (e.g. [Narrator]) ARE FORBIDDEN.' if rules.strict_voiceover_only else 'Normal Voiceover'}"
+            f"Chapter Format: {getattr(rules, 'chapter_format', '[Chapter: <Title>]')} on its own line before each chapter\n"
+            f"Strict Voiceover Only: {'YES! NO STAGE DIRECTIONS ALLOWED. SPEAKER TAGS (e.g. [Narrator]) ARE FORBIDDEN. Write only [Chapter: <Title>] markers and pure spoken words.' if rules.strict_voiceover_only else 'Normal Voiceover'}"
         )
         user_content = templates.SCRIPT_GENERATION_USER.format(
             topic=topic, title=title, language=language, rules=rules_text
@@ -183,6 +184,30 @@ class PromptBuilder:
         )
 
     @staticmethod
+    def build_batch_image_prompts_critic_messages(
+        topic: str,
+        scenes_payload: List[Dict[str, Any]],
+        continuity: VisualContinuityState,
+        preset: ContentPreset,
+        art_style_anchor: str = ""
+    ) -> Dict[str, Any]:
+        preset_style_desc = getattr(preset, "visual_style", "") or (preset.image_rules.visual_style if hasattr(preset, "image_rules") else "") or continuity.art_style_anchor
+        world_setting = getattr(continuity, "world_setting", "") or f"Authentic, grounded documentary reality for {topic}"
+        forbidden = ", ".join(getattr(continuity, "forbidden_cliches", [])) if getattr(continuity, "forbidden_cliches", None) else "Surreal body horror, literalized metaphors, fantasy dreamscapes, on-screen text"
+        user_content = templates.IMAGE_PROMPT_BATCH_CRITIC_USER.format(
+            topic=topic,
+            world_setting=world_setting,
+            forbidden_cliches=forbidden,
+            art_style_anchor=art_style_anchor or continuity.art_style_anchor,
+            preset_guidelines=preset_style_desc,
+            scenes_payload_json=json.dumps(scenes_payload, indent=2)
+        )
+        return PromptBuilder._create_payload(
+            templates.IMAGE_PROMPT_CRITIC_SYSTEM,
+            [{"role": "user", "content": user_content.strip()}]
+        )
+
+    @staticmethod
     def build_final_review_messages(package: GenerationPackage, preset: ContentPreset) -> Dict[str, Any]:
         user_content = templates.FINAL_REVIEW_USER.format(
             package_json=package.model_dump_json(indent=2),
@@ -213,6 +238,21 @@ class PromptBuilder:
             [{"role": "user", "content": user_content.strip()}]
         )
 
+    @staticmethod
+    def build_thumbnail_critic_messages(
+        topic: str, title: str, candidates: List[Dict[str, Any]], preset: ContentPreset, art_style_anchor: str = ""
+    ) -> Dict[str, Any]:
+        user_content = templates.THUMBNAIL_CRITIC_USER.format(
+            title=title,
+            topic=topic,
+            art_style_anchor=art_style_anchor or preset.image_rules.visual_style,
+            candidates_json=json.dumps(candidates, indent=2)
+        )
+        return PromptBuilder._create_payload(
+            templates.THUMBNAIL_CRITIC_SYSTEM,
+            [{"role": "user", "content": user_content.strip()}]
+        )
+
     def build(self, level, preset, inputs: dict) -> str:
         """
         Generic compatibility dispatcher for building single string prompts.
@@ -235,6 +275,8 @@ class PromptBuilder:
             return res["messages"][0]["content"]
         elif "IMAGE" in level_str:
             # Generate continuity / prompts
-            return f"Topic: {topic}\nScript: {script}\nScenes: {scenes}"
+            v_style = getattr(preset, "visual_style", "") or (preset.image_rules.visual_style if hasattr(preset, "image_rules") else "")
+            c_style = getattr(preset, "cinematic_style", "") or (preset.image_rules.cinematic_style if hasattr(preset, "image_rules") else "")
+            return f"Topic: {topic}\nMandatory Preset Visual Style: {v_style}\nCinematic Framing: {c_style}\nScript: {script}\nScenes: {scenes}"
         else:
             return f"Topic: {topic}\nRules: {preset}"

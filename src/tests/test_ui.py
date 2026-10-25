@@ -26,7 +26,9 @@ def qapp():
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    yield app
+    app.closeAllWindows()
+    app.processEvents()
 
 
 def test_theme_content():
@@ -124,7 +126,8 @@ def test_presets_view(qapp):
     first_item = view.preset_list.item(0).text()
     assert len(first_item) > 0
 
-def test_settings_view(qapp):
+def test_settings_view(qapp, monkeypatch, tmp_path):
+    monkeypatch.setattr("app.ui.views.settings_view.SETTINGS_FILE", tmp_path / "settings.json")
     view = SettingsView()
     # Check if a form element exists
     assert view.api_url_edit.text() is not None
@@ -153,6 +156,7 @@ def test_main_window_wiring(qapp):
     assert window.stack.widget(6) == window.logs_view
 
     # Simulate generation
+    window.idea_manager.is_idea_generated = lambda t: False
     window.generate_view.topic_input.setText("Quantum Computing")
     if "money_chuck" in window.generate_view.preset_checkboxes:
         window.generate_view.preset_checkboxes["money_chuck"].setChecked(True)
@@ -160,6 +164,9 @@ def test_main_window_wiring(qapp):
 
     assert len(window.jobs_cache) >= 1
     assert window.dashboard_view.job_table.rowCount() >= 1
+    window.close()
+    if hasattr(window, "log_handler") and window.log_handler:
+        logging.getLogger().removeHandler(window.log_handler)
 
 
 def test_signaled_log_handler(qapp):
@@ -237,6 +244,7 @@ def test_signaled_log_handler_and_logs_view(qapp):
 
     logs_view.btn_clear.click()
     assert logs_view.logs_text.toPlainText() == ""
+    logger.removeHandler(handler)
 
 
 def test_ui_feedback_on_generate_button(qapp):
@@ -309,5 +317,8 @@ def test_main_window_worker_concurrency_queue(qapp):
     # Next job in queue should have started automatically: running count stays 2, queue count drops to 2
     assert len(window._running_workers) == 2
     assert len(window._worker_queue) == 2
+    window.close()
+    if hasattr(window, "log_handler") and window.log_handler:
+        logging.getLogger().removeHandler(window.log_handler)
 
 

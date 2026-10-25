@@ -3,11 +3,11 @@ from pydantic import BaseModel, Field, SecretStr, field_validator
 
 class RequestConfig(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=4096, gt=0, le=64000)
-    request_timeout: float = Field(default=60.0, gt=0.0)
+    max_tokens: int = Field(default=8192, gt=0, le=64000)
+    request_timeout: float = Field(default=180.0, gt=0.0)
     max_concurrent_requests: int = Field(default=3, ge=1, le=20)
     delay_between_requests: float = Field(default=0.5, ge=0.0)
-    max_retries: int = Field(default=5, ge=0, le=10)
+    max_retries: int = Field(default=3, ge=0, le=10)
     retry_backoff: float = Field(default=2.0, ge=1.0)
 
 class APIProfile(BaseModel):

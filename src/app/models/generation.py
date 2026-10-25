@@ -12,6 +12,9 @@ class ScenePrompt(BaseModel):
     mood_lighting: str = ""
     camera_angle: str = ""
     detailed_image_prompt: str
+    full_sentence: str = ""
+    relevance_score: Optional[float] = None
+    is_off_concept: bool = False
 
 class VisualContinuityState(BaseModel):
     recurring_characters: Dict[str, str] = Field(
@@ -23,6 +26,9 @@ class VisualContinuityState(BaseModel):
         description="Map of location name to locked environmental and architectural description"
     )
     art_style_anchor: str = ""
+    world_setting: str = Field(default="", description="Grounded physical, historical, and environmental reality")
+    thematic_motifs: List[str] = Field(default_factory=list)
+    forbidden_cliches: List[str] = Field(default_factory=list)
 
 class GenerationPackage(BaseModel):
     topic: str

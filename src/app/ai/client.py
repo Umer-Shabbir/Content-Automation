@@ -24,7 +24,7 @@ class AnthropicClient:
                 name="default",
                 base_url="https://api.anthropic.com",
                 api_key="default",
-                model="claude-3-haiku-20240307",
+                model="claude-sonnet-4-6",
                 config=RequestConfig()
             )
         self.profile = profile
@@ -51,11 +51,14 @@ class AnthropicClient:
             )
 
     def _get_headers(self) -> Dict[str, str]:
-        return {
+        headers = {
             "x-api-key": self._api_key,
+            "Authorization": f"Bearer {self._api_key}",
             "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
+            "content-type": "application/json",
+            "x-omniroute-no-memory": "true"
         }
+        return headers
 
     def _get_api_url(self) -> str:
         base = self.base_url.rstrip("/")

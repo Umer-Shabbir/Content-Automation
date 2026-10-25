@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QButtonGroup,
-    QLabel
+    QLabel,
+    QMessageBox
 )
 from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread
 from app.ui.views.dashboard_view import DashboardView
@@ -29,6 +30,8 @@ from app.orchestrator.folder_prompt_worker import FolderPromptWorker
 import uuid
 import datetime
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 import asyncio
 import os
 
@@ -70,6 +73,7 @@ class PipelineWorker(QThread):
     """
     finished_signal = Signal(dict)
     failed_signal = Signal(str, str)
+    progress_signal = Signal(str, str)
 
     def __init__(self, topic: str, preset_name: str, settings_data: dict, custom_output_dir: str = "", generate_prompts: bool = False, parent=None):
         super().__init__(parent)
@@ -80,25 +84,33 @@ class PipelineWorker(QThread):
         self.generate_prompts = generate_prompts
 
     def run(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(self._async_run())
-        finally:
-            loop.close()
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self._async_run())
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.exception(f"Unhandled thread error in PipelineWorker for topic '{self.topic}': {e}")
+            self.failed_signal.emit(self.topic, str(e))
 
     async def _async_run(self):
         try:
             # 1. Setup API Client from user Settings
             max_concurrent = self.settings_data.get("max_concurrent_requests", 3)
-            request_config = RequestConfig(max_concurrent_requests=max_concurrent)
+            request_config = RequestConfig(
+                max_concurrent_requests=max_concurrent,
+                request_timeout=180.0,
+                max_tokens=8192
+            )
 
             api_key_str = self.settings_data.get("api_key", "").strip() or "sk-dummy-key-for-local-testing"
             profile = APIProfile(
                 name="runtime_profile",
                 base_url=self.settings_data.get("base_url", "https://api.anthropic.com"),
                 api_key=api_key_str,
-                model=self.settings_data.get("model", "claude-3-haiku-20240307"),
+                model=self.settings_data.get("model", "claude-sonnet-4-6"),
                 config=request_config
             )
             ai_client = AnthropicClient(profile)
@@ -108,30 +120,75 @@ class PipelineWorker(QThread):
             effective_output_dir = self.custom_output_dir.strip() if self.custom_output_dir else fallback_dir
 
             from app.models.preset import BUILTIN_PRESETS
+            from app.db.idea_manager import get_idea_manager
+            from app.db.database import DatabaseCoordinator
             import copy
 
             base_preset = BUILTIN_PRESETS.get(self.preset_name, ContentPreset(name=self.preset_name))
             preset = copy.deepcopy(base_preset)
             preset.output_dir = effective_output_dir
 
-            # 3. Instantiate and run pipeline
-            pipeline = GenerationPipeline()
-            pipeline.title_stage.ai = ai_client
-            pipeline.script_stage.ai = ai_client
-            pipeline.scene_stage.ai = ai_client
-            pipeline.image_prompt_stage.ai = ai_client
-            pipeline.final_review_stage.ai = ai_client
+            # 3. Instantiate and run pipeline with database coordinator
+            db_coordinator = DatabaseCoordinator()
+            idea_manager = get_idea_manager()
+
+            pipeline = GenerationPipeline(db_coordinator=db_coordinator)
+            pipeline.set_ai_client(ai_client)
+            pipeline.image_prompt_stage.batch_size = 5
+            pipeline.image_prompt_stage.max_concurrency = min(3, max_concurrent)
 
             logger.info(f"Starting real generation pipeline for topic: '{self.topic}' with preset '{self.preset_name}' (generate_prompts={self.generate_prompts})...")
-            package = await pipeline.run(topic=self.topic, preset=preset, generate_prompts=self.generate_prompts)
+            self.progress_signal.emit(self.topic, f"Pipeline initialized for '{self.topic}'...")
+
+            def on_progress(msg: str):
+                self.progress_signal.emit(self.topic, msg)
+
+            package = await pipeline.run(
+                topic=self.topic,
+                preset=preset,
+                generate_prompts=self.generate_prompts,
+                progress_callback=on_progress
+            )
 
             # 4. Export the clean files (title.txt, script.txt, project.json, and conditionally prompts.txt)
+            self.progress_signal.emit(self.topic, "Exporting generated files to disk...")
             exported_path = ContentExporter.export_package(
                 package=package,
                 base_output_dir=effective_output_dir,
                 preset=preset
             )
             logger.info(f"Successfully generated and exported content to disk at: {exported_path}")
+
+            # 5. Permanently record idea in the Idea Database so it is never generated again!
+            idea_manager.complete_idea(
+                topic=self.topic,
+                title=package.title,
+                output_dir=str(exported_path),
+                preset_name=self.preset_name
+            )
+
+            # 6. Record generation in generations table
+            try:
+                await db_coordinator.execute(
+                    """
+                    INSERT INTO generations (id, job_id, topic, preset_name, title, normalized_title, script, prompts_json, output_directory)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(normalized_title) DO NOTHING
+                    """,
+                    (
+                        f"gen-{uuid.uuid4().hex[:8]}",
+                        f"job-{uuid.uuid4().hex[:6]}",
+                        self.topic,
+                        self.preset_name,
+                        package.title,
+                        package.normalized_title,
+                        package.script,
+                        json.dumps([p.dict() if hasattr(p, 'dict') else str(p) for p in package.prompts]),
+                        str(exported_path)
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Could not record to generations table: {e}")
 
             result_payload = {
                 "topic": self.topic,
@@ -163,6 +220,9 @@ class MainWindow(QMainWindow):
         self.event_bus = event_bus or EventBus()
         self.bridge = EventBusBridge(self.event_bus)
 
+        from app.db.idea_manager import get_idea_manager
+        self.idea_manager = get_idea_manager()
+
         self.jobs_cache = []
         self._active_workers = []
         self._worker_queue = []       # list of (job_id, worker)
@@ -170,6 +230,10 @@ class MainWindow(QMainWindow):
 
         self._setup_ui()
         self._wire_signals()
+
+        # Initialize and sync idea manager with configured output directory
+        out_dir = self._get_current_settings().get("output_dir", "")
+        self.idea_manager.initialize(extra_scan_dirs=[out_dir] if out_dir else None)
 
     def _setup_ui(self):
         central_widget = QWidget()
@@ -272,6 +336,23 @@ class MainWindow(QMainWindow):
         self.log_handler = SignaledLogHandler()
         self.log_handler.new_log.connect(self.logs_view.append_log)
         logging.getLogger().addHandler(self.log_handler)
+
+        # Persistent log file on disk (~/.content_automation/logs/app.log)
+        try:
+            log_dir = Path.home() / ".content_automation" / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            self.file_handler = RotatingFileHandler(
+                str(log_dir / "app.log"),
+                maxBytes=10 * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8"
+            )
+            self.file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            self.file_handler.setLevel(logging.DEBUG)
+            logging.getLogger().addHandler(self.file_handler)
+        except Exception as e:
+            logger.warning(f"Failed to initialize file logger: {e}")
+
         logging.getLogger().setLevel(logging.DEBUG)
 
     def _wire_signals(self):
@@ -356,6 +437,9 @@ class MainWindow(QMainWindow):
         max_concurrent = settings_data.get("max_concurrent_requests", 3)
         from app.ai.rate_limiter import get_global_rate_limiter
         get_global_rate_limiter(max_concurrent_requests=max_concurrent)
+        out_dir = settings_data.get("output_dir", "")
+        if hasattr(self, "idea_manager") and self.idea_manager and out_dir:
+            self.idea_manager.initialize(extra_scan_dirs=[out_dir])
         self._process_worker_queue()
 
     def _handle_generate_prompts_for_folders(self, folder_paths: list):
@@ -399,15 +483,32 @@ class MainWindow(QMainWindow):
 
         from app.models.preset import BUILTIN_PRESETS
 
+        # If user entered a custom topic, check if it was already generated before!
+        if topic and topic.strip():
+            custom_topic = topic.strip()
+            if self.idea_manager.is_idea_generated(custom_topic):
+                QMessageBox.warning(
+                    self,
+                    "Duplicate Idea Detected",
+                    f"The topic '{custom_topic}' has already been generated previously!\n\n"
+                    "Each idea is strictly generated only once. Please enter a new topic or leave Topic blank to auto-select fresh ungenerated ideas."
+                )
+                return
+
         for preset_slug in presets:
             preset_obj = BUILTIN_PRESETS.get(preset_slug)
-            for idx in range(count):
-                # Auto-sample from preset's niche topic pool if user left topic blank
-                if not topic or not topic.strip():
-                    item_topic = preset_obj.get_topic(idx) if preset_obj else f"{preset_slug.replace('_', ' ').title()} Story"
-                else:
-                    item_topic = topic.strip()
 
+            if topic and topic.strip():
+                preset_topics = []
+                for idx in range(count):
+                    t = topic.strip() if idx == 0 else f"{topic.strip()} (Part {idx + 1})"
+                    self.idea_manager.reserve_idea(preset_name=preset_slug, topic=t, source="custom")
+                    preset_topics.append(t)
+            else:
+                # Auto-select fresh, strictly ungenerated topics from preset niche pool
+                preset_topics = self.idea_manager.get_next_topics_for_preset(preset_slug, preset_obj, count=count)
+
+            for item_topic in preset_topics:
                 job_id = f"job-{uuid.uuid4().hex[:6]}"
                 job_data = {
                     "id": job_id,
@@ -415,7 +516,7 @@ class MainWindow(QMainWindow):
                     "preset": preset_slug,
                     "status": "RUNNING",
                     "created_at": now_str,
-                    "output": f"Executing generation pipeline for '{item_topic}' under '{preset_slug}'..."
+                    "output": f"Initializing generation pipeline for '{item_topic}' under '{preset_slug}'..."
                 }
 
                 # Setup async pipeline worker
@@ -429,9 +530,17 @@ class MainWindow(QMainWindow):
                 )
                 worker.finished_signal.connect(lambda res, j_id=job_id: self._on_worker_finished(j_id, res))
                 worker.failed_signal.connect(lambda t, err, j_id=job_id: self._on_worker_failed(j_id, t, err))
+                worker.progress_signal.connect(lambda t, msg, j_id=job_id: self._on_worker_progress(j_id, t, msg))
                 self._enqueue_worker(job_id, worker, job_data)
 
         self._refresh_dashboard()
+
+    def _on_worker_progress(self, job_id: str, topic: str, message: str):
+        for j in self.jobs_cache:
+            if j.get("id") == job_id:
+                j["output"] = message
+                self.event_bus.publish_sync("job_updated", j)
+                break
 
 
     def _on_worker_finished(self, job_id: str, result_payload: dict):
@@ -447,6 +556,11 @@ class MainWindow(QMainWindow):
 
     def _on_worker_failed(self, job_id: str, topic: str, error_msg: str):
         self._running_workers.pop(job_id, None)
+        if hasattr(self, "idea_manager") and self.idea_manager and topic:
+            try:
+                self.idea_manager.release_idea(topic)
+            except Exception as e:
+                logger.warning(f"Failed to release idea reservation for '{topic}': {e}")
         job_data = {
             "id": job_id,
             "status": "FAILED",
@@ -498,3 +612,16 @@ class MainWindow(QMainWindow):
                 self.jobs_cache[idx].update(job_data)
                 return
         self.jobs_cache.insert(0, job_data)
+
+    def closeEvent(self, event):
+        if hasattr(self, "log_handler") and self.log_handler:
+            try:
+                logging.getLogger().removeHandler(self.log_handler)
+            except Exception:
+                pass
+        if hasattr(self, "file_handler") and self.file_handler:
+            try:
+                logging.getLogger().removeHandler(self.file_handler)
+            except Exception:
+                pass
+        super().closeEvent(event)

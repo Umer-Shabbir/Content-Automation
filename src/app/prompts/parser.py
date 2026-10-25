@@ -39,10 +39,39 @@ def extract_json(text: str) -> Union[Dict[str, Any], List[Any]]:
         try:
             return json.loads(potential_json)
         except json.JSONDecodeError:
-            # Fallback simple fixes
-            # Remove trailing commas
+            # Fallback simple fixes: remove trailing commas
             cleaned = re.sub(r",\s*([\]}])", r"\1", potential_json)
-            return json.loads(cleaned)
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                pass
+
+    # If the first delimiter match failed, try the other delimiter type
+    # For instance, if text started with a preamble containing '{' but the actual payload is an array '[ ... ]'
+    if first_bracket != -1 and (start_idx != first_bracket):
+        last_bracket = text.rfind(']')
+        if last_bracket > first_bracket:
+            bracket_json = text[first_bracket:last_bracket+1]
+            try:
+                return json.loads(bracket_json)
+            except json.JSONDecodeError:
+                cleaned = re.sub(r",\s*([\]}])", r"\1", bracket_json)
+                try:
+                    return json.loads(cleaned)
+                except json.JSONDecodeError:
+                    pass
+    elif first_brace != -1 and (start_idx != first_brace):
+        last_brace = text.rfind('}')
+        if last_brace > first_brace:
+            brace_json = text[first_brace:last_brace+1]
+            try:
+                return json.loads(brace_json)
+            except json.JSONDecodeError:
+                cleaned = re.sub(r",\s*([\]}])", r"\1", brace_json)
+                try:
+                    return json.loads(cleaned)
+                except json.JSONDecodeError:
+                    pass
 
     # Try parsing the whole string directly
     return json.loads(text)
@@ -109,4 +138,50 @@ def extract_script_text(text: str, fallback: str = "") -> str:
 
     cleaned = cleaned.strip(' "\'\r\n\t')
     return cleaned if len(cleaned) > 5 else fallback
+
+
+def extract_chapters_from_script(script: str) -> List[Dict[str, str]]:
+    """
+    Extracts structured chapters from a chapter-based script.
+    Recognizes:
+      [Chapter: <Title>]
+      [Chapter 1: <Title>]
+      Chapter 1: <Title>
+      # Chapter 1: <Title>
+    Returns list of dicts:
+      [{"title": str, "first_sentence": str, "text": str}, ...]
+    """
+    if not script or not isinstance(script, str):
+        return []
+
+    chapter_pattern = re.compile(
+        r'(?:^|\n)\s*(?:\[\s*Chapter(?:\s*\d+)?:\s*([^\]]+)\]|#*\s*Chapter\s+\d+[:\-]\s*([^\n]+))\s*(?:\n|\Z)',
+        re.IGNORECASE
+    )
+
+    matches = list(chapter_pattern.finditer(script))
+    if not matches:
+        return []
+
+    chapters = []
+    for i, match in enumerate(matches):
+        raw_title = match.group(1) or match.group(2) or f"Chapter {i+1}"
+        title = raw_title.strip()
+
+        start_pos = match.end()
+        end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(script)
+        body = script[start_pos:end_pos].strip()
+
+        # Find the first meaningful sentence of the chapter body
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', body) if s.strip()]
+        first_sentence = sentences[0] if sentences else body[:100]
+
+        chapters.append({
+            "title": title,
+            "first_sentence": first_sentence,
+            "text": body
+        })
+
+    return chapters
+
 

@@ -76,8 +76,15 @@ def create():
     }
     
     REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    existing = {}
+    if REGISTRY_PATH.exists():
+        try:
+            existing = json.loads(REGISTRY_PATH.read_text(encoding="utf-8-sig"))
+        except Exception:
+            existing = {}
+    existing.update(presets)
     with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
-        json.dump(presets, f, indent=2)
+        json.dump(existing, f, indent=2)
     print(f"Master registry written to {REGISTRY_PATH}")
 
 if __name__ == "__main__":

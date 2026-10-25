@@ -81,6 +81,24 @@ CREATE TABLE IF NOT EXISTS stage_metrics (
     FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS generated_ideas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    preset_name TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    normalized_topic TEXT NOT NULL,
+    title TEXT,
+    normalized_title TEXT,
+    source TEXT DEFAULT 'preset_pool',
+    output_dir TEXT,
+    status TEXT DEFAULT 'COMPLETED',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    UNIQUE(normalized_topic)
+);
+
 CREATE INDEX IF NOT EXISTS idx_generations_normalized_title ON generations(normalized_title);
 CREATE INDEX IF NOT EXISTS idx_jobs_batch_id ON jobs(batch_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_generated_ideas_norm_topic ON generated_ideas(normalized_topic);
+CREATE INDEX IF NOT EXISTS idx_generated_ideas_preset ON generated_ideas(preset_name);
+CREATE INDEX IF NOT EXISTS idx_generated_ideas_status ON generated_ideas(status);

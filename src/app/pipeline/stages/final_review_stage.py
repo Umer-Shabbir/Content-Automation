@@ -18,7 +18,7 @@ class FinalReviewStage:
             f"Script: {package.script}\n"
             f"Total Scenes: {len(package.prompts)}\n"
             f"Art Style Anchor: {package.continuity.art_style_anchor}\n"
-            f"Evaluate the package for an in-depth 10-20 minute YouTube documentary video. Return valid JSON only: {{\"quality_score\": 9.5, \"reviewer_notes\": \"LGTM\"}}"
+            f"Evaluate the package for an in-depth 10-12 minute YouTube documentary video. Return valid JSON only: {{\"quality_score\": 9.5, \"reviewer_notes\": \"LGTM\"}}"
         )
 
         for _ in range(3):

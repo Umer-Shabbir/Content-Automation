@@ -20,15 +20,17 @@ def clean_artifact_text(text: str) -> str:
     return text
 
 def sanitize_voiceover_script(text: str) -> str:
-    """Strips residual speaker tags, stage directions, and parentheticals from voiceover narration."""
+    """Strips residual speaker tags, stage directions, and parentheticals while preserving chapter markers."""
     if not text:
         return ""
     # Strip speaker labels like [Narrator], Narrator:, Host:, [Voiceover], Voiceover:
     text = re.sub(r'^(?:\[?(?:Narrator|Voiceover|Host|Speaker\s*\d*)\]?:?)\s*', '', text, flags=re.IGNORECASE | re.MULTILINE)
-    # Strip bracketed stage directions like [Music], [Sound effect], [Pause], [Dramatic tone]
-    text = re.sub(r'\[(?:Music|Sound|Pause|Tone|Visual|SFX|Beat|Laughter|Applause|Cut to|Fade to).*?\]', '', text, flags=re.IGNORECASE)
+    # Strip bracketed stage directions like [Music], [Sound effect], [Pause], [Dramatic tone] (preserving [Chapter: ...])
+    text = re.sub(r'\[(?!(?:Chapter|CHAPTER))(?:Music|Sound|Pause|Tone|Visual|SFX|Beat|Laughter|Applause|Cut to|Fade to).*?\]', '', text, flags=re.IGNORECASE)
     # Strip parenthetical production directions like (pause), (dramatic music rises)
     text = re.sub(r'\((?:pause|dramatic|whispering|softly|loudly|music|tone|sfx).*?\)', '', text, flags=re.IGNORECASE)
+    # Normalize chapter tags to clean separate lines
+    text = re.sub(r'\[\s*(?:Chapter|CHAPTER)(?:\s*\d+)?:\s*([^\]]+)\]', r'\n\n[Chapter: \1]\n\n', text)
     # Clean multi-spaces
     text = re.sub(r'[ \t]+', ' ', text)
     text = re.sub(r'\n\s*\n+', '\n\n', text).strip()

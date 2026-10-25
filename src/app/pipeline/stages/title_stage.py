@@ -75,24 +75,37 @@ class TitleStage:
     async def fetch_seo_data(self, query: str) -> Tuple[List[str], List[str]]:
         """
         Uses suggestqueries.google.com to fetch tags and suggestions for YouTube SEO context.
+        Uses non-blocking async HTTP with a strict 3-second timeout so it never hangs or blocks threads.
         """
-        import urllib.request
         import urllib.parse
+        import httpx
+        tags, related = [], []
         try:
-            url = f"http://suggestqueries.google.com/complete/search?client=youtube&ds=yt&client=firefox&q={urllib.parse.quote(query)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            response = urllib.request.urlopen(req)
-            data = json.loads(response.read().decode('utf-8'))
-            tags = data[1] if len(data) > 1 else []
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                url1 = f"https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&client=firefox&q={urllib.parse.quote(query)}"
+                url2 = f"https://suggestqueries.google.com/complete/search?client=chrome&q={urllib.parse.quote(query + ' youtube')}"
 
-            url2 = f"http://suggestqueries.google.com/complete/search?client=chrome&q={urllib.parse.quote(query + ' youtube')}"
-            req2 = urllib.request.Request(url2, headers={'User-Agent': 'Mozilla/5.0'})
-            response2 = urllib.request.urlopen(req2)
-            data2 = json.loads(response2.read().decode('utf-8'))
-            related = data2[1] if len(data2) > 1 else []
-            return tags, related
-        except Exception:
-            return [], []
+                res1, res2 = await asyncio.gather(
+                    client.get(url1, headers=headers),
+                    client.get(url2, headers=headers),
+                    return_exceptions=True
+                )
+                if not isinstance(res1, Exception) and hasattr(res1, "status_code") and res1.status_code == 200:
+                    try:
+                        data = res1.json()
+                        tags = data[1] if len(data) > 1 else []
+                    except Exception:
+                        pass
+                if not isinstance(res2, Exception) and hasattr(res2, "status_code") and res2.status_code == 200:
+                    try:
+                        data2 = res2.json()
+                        related = data2[1] if len(data2) > 1 else []
+                    except Exception:
+                        pass
+        except Exception as e:
+            logging.debug(f"SEO suggestion fetch skipped or timed out: {e}")
+        return tags, related
 
     async def process(self, topic: str, preset: ContentPreset, retry_limit: int = 5, base_output_dir: Optional[str] = None) -> Tuple[str, List[str], str]:
         """
@@ -269,4 +282,3 @@ class TitleStage:
             if is_valid_title(line_clean):
                 clean_lines.append(line_clean)
         return clean_lines
-

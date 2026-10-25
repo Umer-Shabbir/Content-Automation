@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import re
-from typing import Optional, List
+from typing import Optional, List, Callable
 
 from app.models.preset import ContentPreset
 from app.models.generation import GenerationPackage, ScenePrompt
@@ -11,6 +11,7 @@ from app.pipeline.duplicate_checker import DuplicateFilter
 from app.pipeline.stages.script_stage import ScriptStage
 from app.pipeline.stages.scene_stage import SceneStage
 from app.pipeline.stages.image_prompt_stage import ImagePromptStage
+from app.pipeline.stages.thumbnail_stage import ThumbnailStage
 from app.pipeline.stages.final_review_stage import FinalReviewStage
 
 
@@ -48,23 +49,38 @@ def slugify_title(title: str, topic: str = "") -> str:
 
 class GenerationPipeline:
     def __init__(self, title_stage=None, script_stage=None, scene_stage=None,
-                 image_prompt_stage=None, final_review_stage=None,
+                 image_prompt_stage=None, thumbnail_stage=None, final_review_stage=None,
                  db_coordinator=None, base_output_dir=None):
         self.duplicate_filter = DuplicateFilter(db_coordinator=db_coordinator, base_output_dir=base_output_dir)
         self.title_stage = title_stage or TitleStage(duplicate_filter=self.duplicate_filter, base_output_dir=base_output_dir)
         self.script_stage = script_stage or ScriptStage()
         self.scene_stage = scene_stage or SceneStage()
         self.image_prompt_stage = image_prompt_stage or ImagePromptStage()
+        self.thumbnail_stage = thumbnail_stage or ThumbnailStage(ai_client=getattr(self.image_prompt_stage, "ai", None))
         self.final_review_stage = final_review_stage or FinalReviewStage()
         self.base_output_dir = base_output_dir
 
-    async def run(self, topic: str, preset: ContentPreset, generate_prompts: bool = False, audio_chunks: Optional[List[str]] = None, custom_output_dir: Optional[str] = None) -> GenerationPackage:
+    def set_ai_client(self, ai_client):
+        """Sets the AI client across all pipeline stages."""
+        self.title_stage.ai = ai_client
+        self.script_stage.ai = ai_client
+        self.scene_stage.ai = ai_client
+        self.image_prompt_stage.ai = ai_client
+        self.thumbnail_stage.ai = ai_client
+        self.final_review_stage.ai = ai_client
+
+    async def run(self, topic: str, preset: ContentPreset, generate_prompts: bool = False, audio_chunks: Optional[List[str]] = None, custom_output_dir: Optional[str] = None, progress_callback: Optional[Callable[[str], None]] = None) -> GenerationPackage:
         """
         Orchestrates pipeline stages according to the modular decoupled contract:
         - Phase 1 (Script & Title generation): Generates Title, Script, and Metadata.
         - Phase 2 (Audio-synchronized image prompts): Once TTS finishes and transcribed chunks are available (or requested),
           it breaks down scenes and generates style-locked image prompts matching audio chunks.
         """
+        # Synchronize thumbnail_stage and other stages if image_prompt_stage or script_stage has an active AI client
+        active_ai = getattr(self.image_prompt_stage, "ai", None) or getattr(self.script_stage, "ai", None)
+        if active_ai and getattr(self.thumbnail_stage, "ai", None) != active_ai:
+            self.thumbnail_stage.ai = active_ai
+
         effective_output_dir = custom_output_dir or self.base_output_dir or preset.output_dir
 
         package = GenerationPackage(
@@ -79,6 +95,8 @@ class GenerationPipeline:
         )
 
         # 1. Title Generation
+        if progress_callback:
+            progress_callback("Generating title & fetching SEO context...")
         effective_output_dir = custom_output_dir or self.base_output_dir or (preset.output_dir if hasattr(preset, 'output_dir') else None)
         best_title, tags, description = await self.title_stage.process(topic, preset)
         package.title = best_title
@@ -87,6 +105,8 @@ class GenerationPipeline:
         package.normalized_title = slugify_title(package.title, topic=topic)
 
         # 2. Script Generation
+        if progress_callback:
+            progress_callback(f"Generating script for '{best_title}'...")
         package.script = await self.script_stage.process(topic, package.title, preset)
         words = len(package.script.split())
         package.total_words = words
@@ -94,6 +114,8 @@ class GenerationPipeline:
 
         # 3. If image prompts are explicitly requested or audio chunks provided:
         if generate_prompts or audio_chunks:
+            if progress_callback:
+                progress_callback("Generating visual scene breakdowns & prompts...")
             source_content = "\n\n".join(audio_chunks) if audio_chunks else package.script
             scenes_data = await self.scene_stage.process(source_content, preset)
 
@@ -103,93 +125,23 @@ class GenerationPipeline:
             package.continuity = continuity
 
         # 5. Generate 3 distinct thumbnail prompts using the preset's built-in thumbnail styles
+        if progress_callback:
+            progress_callback("Generating thumbnail prompts (generator + critic)...")
         package.thumbnail_prompts = await self.generate_thumbnail_prompts(package, preset)
 
         # 6. Final Review
+        if progress_callback:
+            progress_callback("Running final quality review...")
         package = await self.final_review_stage.process(package)
 
+        if progress_callback:
+            progress_callback("Pipeline complete! Exporting files...")
         return package
 
     async def generate_thumbnail_prompts(self, package: GenerationPackage, preset: ContentPreset) -> List[str]:
         """
-        Generates 3 distinct YouTube thumbnail prompts based on the preset's 3 built-in thumbnail styles.
+        Generates 3 distinct YouTube thumbnail prompts based on the preset's 3 built-in thumbnail styles
+        using a two-step Generator + Critic pipeline.
         """
-        from app.storage.exporter import ContentExporter
-        from app.prompts.builder import PromptBuilder
-        import json, re
-
-        default_data = ContentExporter._get_or_generate_thumbnail_prompts(package, preset)
-        fallback_prompts = [item["prompt"] for item in default_data]
-
-        ai_client = getattr(self.image_prompt_stage, "ai", None)
-        if not ai_client:
-            return fallback_prompts
-
-        try:
-            anchor = package.continuity.art_style_anchor or getattr(preset.image_rules, "visual_style", "")
-            payload = PromptBuilder.build_thumbnail_prompts_messages(
-                topic=package.topic,
-                title=package.title,
-                preset=preset,
-                art_style_anchor=anchor
-            )
-            prompt_content = payload["messages"][0]["content"]
-            system_prompt = payload.get("system", "")
-
-            if hasattr(ai_client, "generate"):
-                res = ai_client.generate(prompt=prompt_content, role="generator")
-                response = await res if inspect.isawaitable(res) else res
-                if hasattr(response, "text") and isinstance(response.text, str):
-                    raw_text = response.text.strip()
-                elif isinstance(response, str):
-                    raw_text = response.strip()
-                else:
-                    raw_text = ""
-            elif hasattr(ai_client, "generate_message"):
-                res = ai_client.generate_message(
-                    messages=[{"role": "user", "content": prompt_content}],
-                    system=system_prompt
-                )
-                response = await res if inspect.isawaitable(res) else res
-                if isinstance(response, dict) and isinstance(response.get("text"), str):
-                    raw_text = response["text"].strip()
-                elif isinstance(response, str):
-                    raw_text = response.strip()
-                else:
-                    raw_text = ""
-            else:
-                return fallback_prompts
-
-            from app.prompts.parser import extract_json
-            parsed = extract_json(raw_text)
-            if isinstance(parsed, dict):
-                for k in ["thumbnail_prompts", "thumbnails", "prompts", "candidates"]:
-                    if isinstance(parsed.get(k), list):
-                        parsed = parsed[k]
-                        break
-
-            if isinstance(parsed, list) and len(parsed) >= 1:
-                llm_prompts = []
-                for idx, item in enumerate(parsed[:3]):
-                    if isinstance(item, dict):
-                        p_text = item.get("thumbnail_prompt") or item.get("prompt") or item.get("text") or ""
-                    elif isinstance(item, str):
-                        p_text = item
-                    else:
-                        p_text = ""
-
-                    if p_text and p_text.strip():
-                        llm_prompts.append(p_text.strip())
-                    elif idx < len(fallback_prompts):
-                        llm_prompts.append(fallback_prompts[idx])
-
-                while len(llm_prompts) < 3 and len(llm_prompts) < len(fallback_prompts):
-                    llm_prompts.append(fallback_prompts[len(llm_prompts)])
-
-                if len(llm_prompts) == 3:
-                    return llm_prompts
-        except Exception:
-            pass
-
-        return fallback_prompts
+        return await self.thumbnail_stage.process(package, preset)
 

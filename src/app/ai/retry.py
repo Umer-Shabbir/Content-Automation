@@ -15,7 +15,7 @@ RETRYABLE_STATUS_CODES = (429, 500, 502, 503, 504)
 class RetryPolicy:
     """Exponential backoff with jitter and respect for retry-after."""
 
-    def __init__(self, max_retries: int = 5, base_backoff: float = 2.0, max_backoff: float = 60.0):
+    def __init__(self, max_retries: int = 3, base_backoff: float = 2.0, max_backoff: float = 60.0):
         self.max_retries = max_retries
         self.base_backoff = base_backoff
         self.max_backoff = max_backoff
@@ -88,17 +88,19 @@ class RetryPolicy:
 
             except httpx.RequestError as e:
                 if retries >= self.max_retries:
-                    logger.error(f'Max retries ({self.max_retries}) reached with request error: {e}')
+                    err_str = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                    logger.error(f'Max retries ({self.max_retries}) reached with request error: {err_str}')
                     raise
 
                 base_delay = min(self.base_backoff ** retries, self.max_backoff)
                 delay = base_delay * (0.5 + random.random())
-                logger.warning(f'Request error: {e}, retrying in {delay:.2f}s...')
+                err_str = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+                logger.warning(f'Request error: {err_str}, retrying in {delay:.2f}s...')
                 await asyncio.sleep(delay)
                 retries += 1
 
 
-def retry_with_backoff(max_retries: int = 5, base_backoff: float = 2.0, max_backoff: float = 60.0):
+def retry_with_backoff(max_retries: int = 3, base_backoff: float = 2.0, max_backoff: float = 60.0):
     """Decorator version of RetryPolicy."""
     policy = RetryPolicy(max_retries=max_retries, base_backoff=base_backoff, max_backoff=max_backoff)
 

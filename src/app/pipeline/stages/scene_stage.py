@@ -64,25 +64,69 @@ class SceneStage:
         script_text = script_or_chunks if isinstance(script_or_chunks, str) else str(script_or_chunks)
         return await self._process_text_breakdown(script_text, preset)
 
+    def _reconstruct_sentence_context(self, srt_chunks: List[SRTChunk]) -> List[str]:
+        """
+        Reconstructs the full grammatical sentence context enclosing each subtitle chunk.
+        Enables downstream prompt engineers to understand the complete narrative idea
+        even when a chunk is only 2-3 words (e.g. 'while the board', 'began to roll').
+        """
+        if not srt_chunks:
+            return []
+
+        # Build clean narrative stream
+        chunk_texts = [c.text.strip() for c in srt_chunks]
+        full_text = " ".join(t for t in chunk_texts if t)
+
+        # Split into sentences using standard sentence delimiters (. ! ?) while preserving punctuation
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', full_text) if s.strip()]
+        if not sentences:
+            sentences = [full_text]
+
+        chunk_sentences = []
+        for c_text in chunk_texts:
+            if not c_text:
+                chunk_sentences.append("")
+                continue
+            # Find the sentence containing this chunk
+            matched_sentence = ""
+            for s in sentences:
+                if c_text in s:
+                    matched_sentence = s
+                    break
+            if not matched_sentence:
+                # Fallback: find by partial or lowercase match
+                c_low = c_text.lower()
+                for s in sentences:
+                    if c_low in s.lower():
+                        matched_sentence = s
+                        break
+            chunk_sentences.append(matched_sentence or c_text)
+
+        return chunk_sentences
+
     def _build_scenes_from_srt_chunks(self, srt_chunks: List[SRTChunk], min_chunk_duration: float = 0.0) -> List[dict]:
         """
         Creates fine-grained scene beats with strict 1:1 alignment with every subtitle chunk.
         Every subtitle chunk becomes its own individual scene beat with matching index.
-        No merging of chunks.
+        No merging of chunks. Injects reconstructed full_sentence context for each beat.
         """
+        sentence_contexts = self._reconstruct_sentence_context(srt_chunks)
         scenes = []
-        for chunk in srt_chunks:
+        for idx, chunk in enumerate(srt_chunks):
             text = chunk.text.strip()
             if not text:
                 continue
 
             scene_idx = len(scenes) + 1
+            full_sent = sentence_contexts[idx] if idx < len(sentence_contexts) and sentence_contexts[idx] else text
+
             scenes.append({
                 "scene_number": scene_idx,
                 "narration_segment": text,
                 "start_time": chunk.start_time,
                 "end_time": chunk.end_time,
                 "visual_description": text,
+                "full_sentence": full_sent,
             })
 
         return scenes

@@ -14,4 +14,6 @@
 - [x] 12. PySide6 UI: Theme, Components & Base Layout (`src/app/ui/theme.py`, `src/app/ui/components/`)
 - [x] 13. PySide6 UI Views: Dashboard, Generate, Presets, Content Browser, Settings, Logs (`src/app/ui/views/`)
 - [x] 14. Main Application Window, Integration & Signal Wiring (`src/app/ui/main_window.py`, `src/app/ui/app.py`)
-- [x] 15. Comprehensive Unit, Integration & End-to-End Test Suite (`src/tests/` - 64/64 tests passing)
+- [x] 15. Comprehensive Unit, Integration & End-to-End Test Suite (`src/tests/` - 96/96 tests passing)
+- [x] 16. Semantic Grounding, Anti-Literalism & Hardened Image Prompt Pipeline (`src/app/pipeline/stages/image_prompt_stage.py`, `src/app/pipeline/stages/scene_stage.py`, `src/app/prompts/`)
+- [x] 17. Hardened Concept Alignment, Zero-Text Mandate, Anti-Surrealism & Robust Anchor Deduplication (`src/app/pipeline/stages/image_prompt_stage.py`, `src/app/prompts/templates.py`, `src/app/prompts/builder.py`, `src/app/models/generation.py`)

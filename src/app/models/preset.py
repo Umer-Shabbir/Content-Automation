@@ -15,12 +15,13 @@ class TitleRules(BaseModel):
     topic_relevance: str = "Must strongly reflect the core topic without inventing a new subject"
 
 class ScriptRules(BaseModel):
-    narrative_structure: str = "The Retention Curve Arc: In Medias Res Hook (0-30s) -> Zeigarnik Open Loop -> Rising Stakes Setup -> Escalating Conflict & Deep Dive with Pattern Interrupts every 30-45s -> Climax -> Philosophical Resolution"
+    narrative_structure: str = "Chapter-based narrative arc (5-7 chapters): Chapter 1: The In Medias Res Hook -> Chapter 2: The Deep Context -> Chapter 3: The Rising Stakes -> Chapter 4: The Turning Point & Escalation -> Chapter 5: The Climax -> Chapter 6: The Philosophical Resolution"
     tone: str = "Atmospheric, dramatic, engaging, high-retention storytelling"
     pacing: str = "Punchy, rhythmic, 160-180 wpm, continuous momentum with dopamine micro-payoffs, zero fluff"
     target_duration_minutes: int = Field(default=10, ge=1, le=60)
     target_words: int = Field(default=1300, ge=100, le=10000)
-    strict_voiceover_only: bool = Field(default=True, description="Enforce zero metadata or stage directions other than speaker tags")
+    strict_voiceover_only: bool = Field(default=True, description="Enforce zero metadata or stage directions other than speaker tags and chapter markers")
+    chapter_format: str = Field(default="[Chapter: <Title>]", description="Format for chapter boundary markers in the script")
 
 class ImageRules(BaseModel):
     visual_style: str = "Cinematic, realistic, moody lighting"
@@ -42,23 +43,32 @@ class ContentPreset(BaseModel):
     description: str = "Money Chuck house style: White-background stick-figure doodle explainers about worst business decisions, scams, and corporate collapses."
     is_builtin: bool = True
     output_dir: str = ""
+    visual_style: Optional[str] = None
+    cinematic_style: Optional[str] = None
     voice_name: str = Field(default="Adam   ·  American Male", description="Target TTS voice identifier written to project.json")
     video_language: str = Field(default="English", description="Target language of the video")
+
+    def model_post_init(self, __context: Any) -> None:
+        super().model_post_init(__context)
+        if self.visual_style and hasattr(self, "image_rules") and self.image_rules:
+            self.image_rules.visual_style = self.visual_style
+        if self.cinematic_style and hasattr(self, "image_rules") and self.image_rules:
+            self.image_rules.cinematic_style = self.cinematic_style
     thumbnail_styles: List[ThumbnailStyle] = Field(default_factory=lambda: [
         ThumbnailStyle(
-            id="stupidity_diagram",
-            name="The Stupidity Diagram",
-            description="Pure white background stick-figure CEO smugly holding a burning bag of money or absurd failed product, thick black marker linework, red marker 'FAIL' badge. High humor, visually striking, no text."
+            id="smug_billionaire_caricature",
+            name="The Smug Billionaire Caricature",
+            description="Pure white background (#FFFFFF) featuring a dominant, oversized stick-figure CEO caricature with dollar-sign eyes smugly clutching a comically massive bag of burning money, thick black marker linework, one bright red marker 'FAIL' stamp, 50% screen dominance, hilarious and punchy, no text."
         ),
         ThumbnailStyle(
-            id="cliff_collapse",
-            name="The $40B Cliff Collapse",
-            description="Stick figure staring in shock down a catastrophic red marker line chart plunging off a cliff through the floor, clean doodle humor on pure white void. High drama, no text."
+            id="cliff_collapse_40b",
+            name="The $40 Billion Cliff Plunge",
+            description="Stick-figure CEO dangling by fingertips from a violently steep red marker line chart that plunges through the floor into a bottomless white void, burning balance sheets flying through the air, high-stakes financial panic on pure white void. High drama, no text."
         ),
         ThumbnailStyle(
-            id="monopoly_emperor",
-            name="Monopoly Emperor",
-            description="Stick-figure billionaire caricature perched atop a precariously wobbling mountain of burning cash, tiny stick-figure victims fleeing, pure white void. High contrast, no text."
+            id="smoke_and_mirrors_split",
+            name="The House of Smoke & Mirrors",
+            description="High-contrast doodle split: left side shows a gleaming stick-figure corporate facade held up by a single shaky toothpick; right side shows the entire back wall collapsed in a roaring red-and-yellow doodle inferno, stark black ink on pure white void. Maximum visual comedy and tension, no text."
         )
     ])
     niche_topics: List[str] = Field(default_factory=lambda: [
@@ -92,12 +102,13 @@ class ContentPreset(BaseModel):
         topic_relevance="Directly address one business-failure theme per video. All 10 stories must fit the title's promise."
     ))
     script_rules: ScriptRules = Field(default_factory=lambda: ScriptRules(
-        narrative_structure="Cold-open paradox hook -> 10 self-contained mini-stories back-to-back (Peak Setup -> Fateful Decision -> Escalation -> Collapse -> Punchline kicker)",
+        narrative_structure="Chapter-based corporate disaster & fraud breakdown (5-7 chapters): Chapter 1: The 40 Billion Illusion (The Absurd Valuation Hook) -> Chapter 2: The Charismatic Charlatan (The Pitch, The Ego & The Cult) -> Chapter 3: The Boardroom Cowards (Enablers, Red Flags & Complicity) -> Chapter 4: The Cash Inferno (Burning Through Billions in Broad Daylight) -> Chapter 5: The 48-Hour Freefall (The Unraveling, The Run & The Collapse) -> Chapter 6: The Golden Parachute (The Aftermath, The Victims & The Punchline)",
         tone="Deadpan, wry, third-person storyteller. Dry humor, never slapstick. Mock solemnity.",
         pacing="Short punchy sentences. ~170-190 words per minute. No filler, no recap segments, no rhetorical questions.",
         target_duration_minutes=10,
         target_words=2200,
-        strict_voiceover_only=True
+        strict_voiceover_only=True,
+        chapter_format="[Chapter: <Title>]"
     ))
     image_rules: ImageRules = Field(default_factory=lambda: ImageRules(
         visual_style="Minimalist black stick-figure doodle animation on a PURE WHITE background (#FFFFFF). Thick rounded marker linework, flat 2D cartoon shapes, one flat accent color max. No photorealism, no gradients, no shadows, no textures.",
@@ -169,12 +180,13 @@ def load_builtin_presets() -> dict:
                         curiosity_level=9
                     ),
                     "script_rules": ScriptRules(
-                        narrative_structure=ca.get("narrative_structure", "The Retention Curve Arc: In Medias Res Hook (0-30s) -> Zeigarnik Open Loop -> Rising Stakes Setup -> Escalating Conflict & Deep Dive with Pattern Interrupts every 30-45s -> Climax -> Philosophical Resolution"),
+                        narrative_structure=ca.get("narrative_structure", "Chapter-based narrative arc (5-7 chapters): Chapter 1: The In Medias Res Hook -> Chapter 2: The Deep Context -> Chapter 3: The Rising Stakes -> Chapter 4: The Turning Point & Escalation -> Chapter 5: The Climax -> Chapter 6: The Philosophical Resolution"),
                         tone=ca.get("tone", "Atmospheric, dramatic, engaging, high-retention storytelling"),
                         pacing=ca.get("pacing", "Punchy, rhythmic, 160-180 wpm, continuous momentum with dopamine micro-payoffs, zero fluff"),
                         target_duration_minutes=ca.get("target_duration_minutes", 10),
                         target_words=ca.get("target_words", 1800),
-                        strict_voiceover_only=True
+                        strict_voiceover_only=True,
+                        chapter_format=ca.get("chapter_format", "[Chapter: <Title>]")
                     ),
                     "image_rules": ImageRules(
                         visual_style=ia.get("visual_style", "Cinematic"),

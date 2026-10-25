@@ -84,21 +84,29 @@ class FolderPromptWorker(QThread):
 
             # 1. Setup AI Client
             max_concurrent = self.settings_data.get("max_concurrent_requests", 3)
-            request_config = RequestConfig(max_concurrent_requests=max_concurrent)
+            request_config = RequestConfig(
+                max_concurrent_requests=max_concurrent,
+                request_timeout=180.0,
+                max_tokens=8192
+            )
             api_key_str = self.settings_data.get("api_key", "").strip() or "sk-dummy-key-for-local-testing"
 
             profile = APIProfile(
                 name="prompt_worker_profile",
                 base_url=self.settings_data.get("base_url", "https://api.anthropic.com"),
                 api_key=api_key_str,
-                model=self.settings_data.get("model", "claude-3-haiku-20240307"),
+                model=self.settings_data.get("model", "claude-sonnet-4-6"),
                 config=request_config
             )
             ai_client = AnthropicClient(profile)
 
             # 2. Break down into scenes
             scene_stage = SceneStage(ai_client=ai_client)
-            prompt_stage = ImagePromptStage(ai_client=ai_client)
+            prompt_stage = ImagePromptStage(
+                ai_client=ai_client,
+                batch_size=5,
+                max_concurrency=min(3, max_concurrent)
+            )
 
             logger.info(f"Breaking down script for project folder '{folder.name}' into visual scenes...")
             input_for_scene = srt_chunks if srt_chunks else script_text

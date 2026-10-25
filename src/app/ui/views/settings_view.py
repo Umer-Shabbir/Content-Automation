@@ -55,7 +55,7 @@ class SettingsView(QWidget):
 
         # Model Name
         self.model_name_edit = QLineEdit()
-        self.model_name_edit.setText("claude-3-haiku-20240307")
+        self.model_name_edit.setText("claude-sonnet-4-6")
         form_layout.addRow("Model Name:", self.model_name_edit)
 
         # Max Concurrent API Requests
